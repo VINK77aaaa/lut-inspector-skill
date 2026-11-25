@@ -27,7 +27,7 @@
 
 ---
 
-## 为什么需要 LUT Inspector？
+
 
 很多调色师和 DIT 都遇过同一个现场噩梦：**LUT 在 DaVinci Resolve 监视器里完美无瑕，一导进 Sony VENICE / FX6 / FX3 机内监看，高光就出现类似斑马纹的黑白/补色条纹，极暗部更是炸满蠕动彩噪。**
 
