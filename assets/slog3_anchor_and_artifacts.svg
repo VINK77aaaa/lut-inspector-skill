@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 480" width="1200" height="480">
+  <defs>
+    <linearGradient id="bgMain" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#090e18" />
+      <stop offset="100%" stop-color="#0d1322" />
+    </linearGradient>
+    <linearGradient id="dangerZone" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.22" />
+      <stop offset="100%" stop-color="#f43f5e" stop-opacity="0.04" />
+    </linearGradient>
+    <linearGradient id="subBlackZone" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.18" />
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.03" />
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="480" rx="16" fill="url(#bgMain)" stroke="#1e293b" stroke-width="1.5" />
+
+  <!-- Header -->
+  <g font-family="system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif" text-anchor="middle">
+    <text x="600" y="42" fill="#f8fafc" font-size="22" font-weight="800">为什么 DaVinci 32-bit 视口看似正常，一进摄影机就炸？</text>
+    <text x="600" y="68" fill="#94a3b8" font-size="14">两大现场致命伪影的底层数学机制：定点溢出回绕（斑马纹）与 S-Log3 黑位物理共振（极暗部彩噪）</text>
+  </g>
+
+  <!-- LEFT CARD: Zebra / Wrap-Around / Solarization -->
+  <g>
+    <rect x="30" y="90" width="556" height="362" rx="14" fill="#0f172a" stroke="#334155" stroke-width="1.2" />
+    <rect x="30" y="90" width="556" height="42" rx="14" fill="#1e1320" />
+    <rect x="30" y="118" width="556" height="14" fill="#1e1320" />
+    <line x1="30" y1="132" x2="586" y2="132" stroke="#f43f5e" stroke-opacity="0.35" stroke-width="1" />
+    <circle cx="52" cy="111" r="5" fill="#f43f5e" />
+    <text x="68" y="116" fill="#fecdd3" font-size="15.5" font-weight="700" font-family="system-ui, 'Microsoft YaHei', sans-serif">痛点一：高光斑马纹 / 等高线条纹（Zebra &amp; Solarization）</text>
+
+    <!-- Plot Box -->
+    <rect x="64" y="148" width="492" height="190" rx="8" fill="#080d17" stroke="#1e293b" stroke-width="1" />
+    <!-- >1.0 Clipping Illusion Zone -->
+    <rect x="65" y="149" width="490" height="44" rx="6" fill="url(#dangerZone)" />
+    <text x="80" y="168" fill="#fda4af" font-size="11" font-weight="600" font-family="system-ui, 'Microsoft YaHei', sans-serif">Resolve 32-bit 浮点视口：超白 &gt; 1.0 自然裁切为纯白（调色师肉眼看不出异常）</text>
+
+    <!-- 1.0 Safe Line -->
+    <line x1="64" y1="193" x2="556" y2="193" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6,4" />
+    <text x="72" y="187" fill="#fbbf24" font-size="10.5" font-weight="700" font-family="'JetBrains Mono', Consolas, monospace">1.0 SAFE CEILING</text>
+
+    <!-- 0.0 Floor Line -->
+    <line x1="64" y1="322" x2="556" y2="322" stroke="#475569" stroke-width="1" stroke-dasharray="3,4" />
+    <text x="72" y="316" fill="#94a3b8" font-size="10.5" font-family="'JetBrains Mono', Consolas, monospace">0.0 BLACK</text>
+
+    <!-- Clean Curve -->
+    <path d="M 86 318 C 145 312, 200 282, 260 250 C 320 218, 385 201, 526 198" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-opacity="0.65" />
+    <text x="456" y="214" fill="#7dd3fc" font-size="11" font-family="system-ui, 'Microsoft YaHei', sans-serif">安全平滑曲线</text>
+
+    <!-- Broken Curve with Solarization + Wrap-around -->
+    <path d="M 86 318 C 145 312, 200 282, 260 250 C 292 232, 314 218, 336 212 C 350 208, 362 246, 378 232 C 398 214, 424 168, 456 168 L 458 310 L 526 306"
+          fill="none" stroke="#f43f5e" stroke-width="2.5" />
+
+    <!-- Solarization Callout -->
+    <circle cx="362" cy="236" r="5" fill="#e879f9" stroke="#080d17" stroke-width="1.5" />
+    <line x1="362" y1="241" x2="362" y2="270" stroke="#e879f9" stroke-width="1" stroke-dasharray="2,2" />
+    <rect x="278" y="270" width="166" height="34" rx="6" fill="#23122a" stroke="#e879f9" stroke-opacity="0.6" stroke-width="1" />
+    <text x="361" y="285" text-anchor="middle" fill="#f5d0fe" font-size="11" font-weight="600" font-family="system-ui, 'Microsoft YaHei', sans-serif">dY/dx &lt; 0 单调反转</text>
+    <text x="361" y="299" text-anchor="middle" fill="#d8b4fe" font-size="10" font-family="system-ui, 'Microsoft YaHei', sans-serif">高亮过渡突然变暗（反相条带）</text>
+
+    <!-- Wrap-around Callout -->
+    <circle cx="456" cy="168" r="4.5" fill="#fbbf24" />
+    <circle cx="458" cy="310" r="5" fill="#f43f5e" />
+    <path d="M 464 172 L 464 302" stroke="#fbbf24" stroke-width="1.4" stroke-dasharray="3,2" />
+    <text x="472" y="244" fill="#fde68a" font-size="11" font-weight="700" font-family="system-ui, 'Microsoft YaHei', sans-serif">定点溢出回绕!</text>
+    <text x="472" y="259" fill="#fda4af" font-size="10.5" font-family="'JetBrains Mono', Consolas, monospace">1.05 → 0.05 纯黑</text>
+
+    <!-- Bullet Explanations -->
+    <g font-family="system-ui, 'Microsoft YaHei', sans-serif" font-size="12.5" fill="#cbd5e1">
+      <circle cx="66" cy="364" r="3.5" fill="#fbbf24" />
+      <text x="78" y="368"><tspan fill="#fde68a" font-weight="700">超白溢出回绕：</tspan>&gt; 1.0 浮点值进入机内无符号定点管线，周期性回绕为纯黑或补色斑马带。</text>
+
+      <circle cx="66" cy="393" r="3.5" fill="#e879f9" />
+      <text x="78" y="397"><tspan fill="#f5d0fe" font-weight="700">反转与锯齿振荡：</tspan>减法饱和度或高曲率 DCTL 引发 dY/dx &lt; 0 与正负震荡等高线。</text>
+
+      <circle cx="66" cy="422" r="3.5" fill="#f43f5e" />
+      <text x="78" y="426"><tspan fill="#fda4af" font-weight="700">三维折叠与插值分歧：</tspan>det(J) &lt; 0 晶格翻转，Resolve 四面体 vs 机内三线性撕裂。</text>
+    </g>
+  </g>
+
+  <!-- RIGHT CARD: S-Log3 Black Level Resonance & Shadow Chroma Explosion -->
+  <g>
+    <rect x="614" y="90" width="556" height="362" rx="14" fill="#0f172a" stroke="#334155" stroke-width="1.2" />
+    <rect x="614" y="90" width="556" height="42" rx="14" fill="#10202e" />
+    <rect x="614" y="118" width="556" height="14" fill="#10202e" />
+    <line x1="614" y1="132" x2="1170" y2="132" stroke="#38bdf8" stroke-opacity="0.35" stroke-width="1" />
+    <circle cx="636" cy="111" r="5" fill="#38bdf8" />
+    <text x="652" y="116" fill="#bae6fd" font-size="15.5" font-weight="700" font-family="system-ui, 'Microsoft YaHei', sans-serif">痛点二：极暗部彩噪 / 闪点（S-Log3 黑位物理共振）</text>
+
+    <!-- Plot Box -->
+    <rect x="648" y="148" width="492" height="190" rx="8" fill="#080d17" stroke="#1e293b" stroke-width="1" />
+    <!-- Sub-black negative underflow region -->
+    <rect x="649" y="149" width="144" height="188" rx="6" fill="url(#subBlackZone)" />
+    <text x="658" y="168" fill="#67e8f9" font-size="11" font-weight="600" font-family="system-ui, 'Microsoft YaHei', sans-serif">超黑区 (&lt; 95 码值)</text>
+    <text x="658" y="183" fill="#a5f3fc" font-size="10" font-family="system-ui, 'Microsoft YaHei', sans-serif">矩阵/Lift 负值下溢闪点</text>
+
+    <!-- 33-pt Lattice Grid Vertical Lines (i=0..5) -->
+    <g stroke="#1e293b" stroke-width="1" font-family="'JetBrains Mono', Consolas, monospace" font-size="9.5" fill="#64748b" text-anchor="middle">
+      <line x1="664" y1="196" x2="664" y2="322" />
+      <text x="664" y="333">i=0 (0.0)</text>
+      <line x1="752" y1="196" x2="752" y2="322" />
+      <text x="752" y="333">i=1 (.031)</text>
+      <line x1="840" y1="196" x2="840" y2="322" />
+      <text x="840" y="333">i=2 (.063)</text>
+      <line x1="928" y1="154" x2="928" y2="322" stroke="#334155" />
+      <text x="928" y="333" fill="#94a3b8" font-weight="700">i=3 (.09375)</text>
+      <line x1="1016" y1="196" x2="1016" y2="322" />
+      <text x="1016" y="333">i=4 (.125)</text>
+      <line x1="1104" y1="196" x2="1104" y2="322" />
+      <text x="1104" y="333">i=5 (.156)</text>
+    </g>
+
+    <!-- S-Log3 0% Black Anchor 95/1023 = 0.092864 -->
+    <line x1="920" y1="152" x2="920" y2="322" stroke="#a855f7" stroke-width="2" stroke-dasharray="5,3" />
+    <rect x="826" y="154" width="186" height="22" rx="5" fill="#2e1065" stroke="#a855f7" stroke-width="1" />
+    <text x="919" y="169" text-anchor="middle" fill="#e9d5ff" font-size="10.5" font-weight="700" font-family="'JetBrains Mono', Consolas, monospace">0% 黑电平 95/1023 ≈ 0.0929</text>
+
+    <!-- Sensor noise shake envelope -->
+    <rect x="880" y="286" width="80" height="34" rx="4" fill="#a855f7" fill-opacity="0.16" stroke="#c084fc" stroke-opacity="0.5" stroke-dasharray="2,2" />
+    <text x="920" y="307" text-anchor="middle" fill="#d8b4fe" font-size="10" font-family="system-ui, 'Microsoft YaHei', sans-serif">±底噪跨格抖动</text>
+
+    <!-- 0.0 Reference -->
+    <line x1="648" y1="312" x2="1140" y2="312" stroke="#475569" stroke-width="1" />
+
+    <!-- Safe chroma curve -->
+    <path d="M 664 312 L 840 310 L 928 302 L 1016 292 L 1104 282" fill="none" stroke="#10b981" stroke-width="2.2" stroke-opacity="0.8" />
+
+    <!-- Chroma Explosion Spike near 0.0929 -->
+    <path d="M 664 318 L 752 318 L 840 268 L 920 190 L 1016 258 L 1104 282" fill="none" stroke="#f97316" stroke-width="2.8" />
+    <circle cx="920" cy="190" r="5.5" fill="#f97316" stroke="#080d17" stroke-width="1.5" />
+    <rect x="942" y="182" width="184" height="36" rx="6" fill="#2b1409" stroke="#f97316" stroke-opacity="0.7" stroke-width="1" />
+    <text x="1034" y="197" text-anchor="middle" fill="#fed7aa" font-size="11" font-weight="700" font-family="system-ui, 'Microsoft YaHei', sans-serif">近灰轴色度除零爆炸!</text>
+    <text x="1034" y="211" text-anchor="middle" fill="#fdba74" font-size="10" font-family="'JetBrains Mono', Consolas, monospace">1/(L+ε) 放大彩噪 266x</text>
+
+    <!-- Underflow Speck Marker -->
+    <circle cx="720" cy="318" r="4.5" fill="#22d3ee" />
+    <text x="720" y="294" text-anchor="middle" fill="#67e8f9" font-size="10.5" font-weight="600" font-family="system-ui, 'Microsoft YaHei', sans-serif">&lt; 0.0 下溢闪点</text>
+
+    <!-- Bullet Explanations -->
+    <g font-family="system-ui, 'Microsoft YaHei', sans-serif" font-size="12.5" fill="#cbd5e1">
+      <circle cx="650" cy="364" r="3.5" fill="#a855f7" />
+      <text x="662" y="368"><tspan fill="#e9d5ff" font-weight="700">物理锚点共振：</tspan>S-Log3 黑位 (0.09286) 紧贴第 3 层 (0.09375)，热噪直接跨格抖动。</text>
+
+      <circle cx="650" cy="393" r="3.5" fill="#f97316" />
+      <text x="662" y="397"><tspan fill="#fed7aa" font-weight="700">除零色度爆炸：</tspan>DCTL 计算饱和度时分母趋近 0，微弱底噪被拉裂成红绿蓝蠕动彩噪。</text>
+
+      <circle cx="650" cy="422" r="3.5" fill="#22d3ee" />
+      <text x="662" y="426"><tspan fill="#a5f3fc" font-weight="700">负值下溢闪点：</tspan>色域矩阵负系数或减法 Lift 输出 &lt; 0.0，定点下溢成 0.99+ 高亮杂点。</text>
+    </g>
+  </g>
+</svg>

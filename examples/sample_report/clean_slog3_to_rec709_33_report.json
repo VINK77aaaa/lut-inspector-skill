@@ -1,0 +1,134 @@
+{
+  "file": "examples/clean_slog3_to_rec709_33.cube",
+  "title": "Clean_Sony_SLog3_to_Rec709_33",
+  "target": "sony_cinealta",
+  "profile": "slog3",
+  "profile_name": "Sony S-Log3 / S-Gamut3.Cine (VENICE / FX6 / FX3)",
+  "summary": {
+    "status": "PASS",
+    "score": 100,
+    "critical_count": 0,
+    "warning_count": 0,
+    "info_count": 0,
+    "parse_warnings": []
+  },
+  "findings": [],
+  "metrics": {
+    "hardware_and_range": {
+      "lut_1d_size": null,
+      "lut_3d_size": 33,
+      "effective_grid_size": 33,
+      "domain_min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "domain_max": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "has_bom": false,
+      "has_non_ascii_text": false,
+      "has_non_ascii_filename": false,
+      "nan_count": 0,
+      "inf_count": 0,
+      "negative_zero_count": 0,
+      "min_value": 7.4e-05,
+      "max_value": 0.946347,
+      "below_zero_count": 0,
+      "above_one_count": 0,
+      "below_zero_pct": 0.0,
+      "above_one_pct": 0.0,
+      "black_corner_out": [
+        0.00578,
+        0.00578,
+        0.00578
+      ],
+      "white_corner_out": [
+        0.94635,
+        0.94635,
+        0.94635
+      ]
+    },
+    "monotonicity_and_zebra": {
+      "reversal_events": [],
+      "oscillation_events": [],
+      "step_events": [],
+      "axial_reversals": {
+        "R": 0,
+        "G": 0,
+        "B": 0,
+        "total": 0,
+        "ratio_pct": 0.0
+      },
+      "gray_max_slope": 1.881,
+      "gray_min_slope": 0.003
+    },
+    "jacobian_folding": {
+      "folded_voxels": 0,
+      "total_voxels": 32768,
+      "folded_pct": 0.0,
+      "min_normalized_det_j": -0.0106,
+      "max_normalized_det_j": 8.678,
+      "worst_folded_coord": null
+    },
+    "extreme_shadows": {
+      "max_shadow_luma_slope": 0.817,
+      "max_shadow_channel_slope": 0.817,
+      "max_slope_input_t": 0.1566,
+      "max_shadow_axis_chroma": 0.0004,
+      "max_near_axis_chroma": 0.0697,
+      "max_shadow_chroma_gain": 1.115,
+      "chroma_explosion_voxels": 0,
+      "worst_chroma_coord": [
+        0.2188,
+        0.1562,
+        0.1562
+      ],
+      "worst_chroma_out": [
+        0.1132,
+        0.0436,
+        0.0503
+      ],
+      "zero_step_jump": 0.0001,
+      "monte_carlo_noise_sim": {
+        "test_center_input": 0.1049,
+        "input_sigma": 0.0035,
+        "ref_luma_std": 0.00134,
+        "lut_luma_std": 0.00141,
+        "luma_noise_amp_vs_ref": 1.06,
+        "ref_chroma_std": 0.00242,
+        "lut_chroma_std": 0.00254,
+        "chroma_noise_amp_vs_ref": 1.05,
+        "chroma_gain_over_input": 0.73,
+        "hw_wrap_triggered": false
+      }
+    },
+    "interpolation_divergence": {
+      "max_divergence_delta_rgb": 0.02431,
+      "p99_divergence_delta_rgb": 0.00944,
+      "mean_divergence_delta_rgb": 0.00101,
+      "worst_coord": [
+        0.1094,
+        0.5781,
+        0.5781
+      ]
+    },
+    "discontinuities_and_clipping": {
+      "max_adjacent_delta_rgb": 0.1871,
+      "p999_adjacent_delta_rgb": 0.1237,
+      "worst_jump_axis": "G",
+      "worst_jump_coord": [
+        0.0,
+        0.5625,
+        0.5625
+      ],
+      "highlight_clipped_cube_ratio_pct": 0.0
+    }
+  },
+  "artifacts": {
+    "diagnostics_png": "examples/sample_report/clean_slog3_to_rec709_33_diagnostics.png",
+    "stress_test_png": "examples/sample_report/clean_slog3_to_rec709_33_stress_test.png"
+  }
+}

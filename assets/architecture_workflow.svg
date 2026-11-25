@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 385" width="1200" height="385">
+  <defs>
+    <linearGradient id="archBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#080d17" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <marker id="arrowBlue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M 0 1 L 7 4 L 0 7 z" fill="#38bdf8" />
+    </marker>
+    <marker id="arrowGreen" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M 0 1 L 7 4 L 0 7 z" fill="#10b981" />
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="385" rx="16" fill="url(#archBg)" stroke="#1e293b" stroke-width="1.5" />
+
+  <!-- Header -->
+  <g font-family="system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif" text-anchor="middle">
+    <text x="600" y="40" fill="#f8fafc" font-size="21" font-weight="800">LUT Inspector 全流程科学质检与安全修复闭环架构</text>
+    <text x="600" y="64" fill="#94a3b8" font-size="13.5">从 DaVinci Resolve 导出诊断 → 数学与图像双维定位 → 机内安全重采样 → 复检通过交付摄影机</text>
+  </g>
+
+  <!-- Step 1 -->
+  <g>
+    <rect x="36" y="90" width="204" height="226" rx="12" fill="#0d1626" stroke="#38bdf8" stroke-opacity="0.55" stroke-width="1.3" />
+    <rect x="36" y="90" width="204" height="34" rx="12" fill="#0f2537" />
+    <rect x="36" y="112" width="204" height="12" fill="#0f2537" />
+    <text x="138" y="112" text-anchor="middle" fill="#7dd3fc" font-size="13" font-weight="700" font-family="system-ui, 'Microsoft YaHei', sans-serif">1. 源 LUT 文件输入</text>
+    <g font-family="system-ui, 'Microsoft YaHei', sans-serif" font-size="12" fill="#cbd5e1">
+      <text x="52" y="150" fill="#f8fafc" font-weight="700">DaVinci + DCTL (.cube)</text>
+      <text x="52" y="178">• 支持 1D / 3D / 1D+3D</text>
+      <text x="52" y="204">• 兼容 17 / 33 / 65 点晶格</text>
+      <text x="52" y="230">• 检测 BOM 与非 ASCII 字符</text>
+      <text x="52" y="256">• 内置 10 种 Log 预设</text>
+      <rect x="52" y="274" width="172" height="26" rx="6" fill="#172536" />
+      <text x="138" y="291" text-anchor="middle" fill="#7dd3fc" font-size="11" font-family="'JetBrains Mono', Consolas, monospace">--profile slog3</text>
+    </g>
+  </g>
+
+  <line x1="242" y1="203" x2="262" y2="203" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrowBlue)" />
+
+  <!-- Step 2 -->
+  <g>
+    <rect x="266" y="90" width="204" height="226" rx="12" fill="#0d1626" stroke="#818cf8" stroke-opacity="0.55" stroke-width="1.3" />
+    <rect x="266" y="90" width="204" height="34" rx="12" fill="#181c3a" />
+    <rect x="266" y="112" width="204" height="12" fill="#181c3a" />
+    <text x="368" y="112" text-anchor="middle" fill="#c7d2fe" font-size="13" font-weight="700" font-family="system-ui, 'Microsoft YaHei', sans-serif">2. 科学质检引擎</text>
+    <g font-family="system-ui, 'Microsoft YaHei', sans-serif" font-size="12" fill="#cbd5e1">
+      <text x="282" y="150" fill="#a5b4fc" font-weight="700" font-family="'JetBrains Mono', Consolas, monospace">inspect_lut.py</text>
+      <text x="282" y="178">• [0, 1] 越界 &amp; NaN/Inf 扫描</text>
+      <text x="282" y="204">• 单调反转 &amp; 雅可比 det(J)</text>
+      <text x="282" y="230">• 64×64 传感器底噪仿真</text>
+      <text x="282" y="256">• 四面体 vs 三线性插值比对</text>
+      <rect x="282" y="274" width="172" height="26" rx="6" fill="#1e203d" />
+      <text x="368" y="291" text-anchor="middle" fill="#c7d2fe" font-size="11" font-family="'JetBrains Mono', Consolas, monospace">0 ~ 100 健康评分</text>
+    </g>
+  </g>
+
+  <line x1="472" y1="203" x2="492" y2="203" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrowBlue)" />
+
+  <!-- Step 3 -->
+  <g>
+    <rect x="496" y="90" width="204" height="226" rx="12" fill="#0d1626" stroke="#f59e0b" stroke-opacity="0.55" stroke-width="1.3" />
+    <rect x="496" y="90" width="204" height="34" rx="12" fill="#261c0d" />
+    <rect x="496" y="112" width="204" height="12" fill="#261c0d" />
+    <text x="598" y="112" text-anchor="middle" fill="#fde68a" font-size="13" font-weight="700" font-family="system-ui, 'Microsoft YaHei', sans-serif">3. 双图 + 双报告产出</text>
+    <g font-family="system-ui, 'Microsoft YaHei', sans-serif" font-size="12" fill="#cbd5e1">
+      <text x="512" y="150" fill="#fcd34d" font-weight="700">可视化定位 &amp; 节点建议</text>
+      <text x="512" y="178" font-family="'JetBrains Mono', Consolas, monospace" font-size="11.5">• *_diagnostics.png</text>
+      <text x="512" y="204" font-family="'JetBrains Mono', Consolas, monospace" font-size="11.5">• *_stress_test.png</text>
+      <text x="512" y="230" font-family="'JetBrains Mono', Consolas, monospace" font-size="11.5">• *_report.json</text>
+      <text x="512" y="256" font-family="'JetBrains Mono', Consolas, monospace" font-size="11.5">• *_report.md</text>
+      <rect x="512" y="274" width="172" height="26" rx="6" fill="#2b2111" />
+      <text x="598" y="291" text-anchor="middle" fill="#fde68a" font-size="11" font-family="system-ui, 'Microsoft YaHei', sans-serif">提前抓出上机伪影</text>
+    </g>
+  </g>
+
+  <line x1="702" y1="203" x2="722" y2="203" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrowBlue)" />
+
+  <!-- Step 4 -->
+  <g>
+    <rect x="726" y="90" width="204" height="226" rx="12" fill="#0d1626" stroke="#fb7185" stroke-opacity="0.55" stroke-width="1.3" />
+    <rect x="726" y="90" width="204" height="34" rx="12" fill="#28121b" />
+    <rect x="726" y="112" width="204" height="12" fill="#28121b" />
+    <text x="828" y="112" text-anchor="middle" fill="#fecdd3" font-size="13" font-weight="700" font-family="system-ui, 'Microsoft YaHei', sans-serif">4. 机内安全应急修复</text>
+    <g font-family="system-ui, 'Microsoft YaHei', sans-serif" font-size="12" fill="#cbd5e1">
+      <text x="742" y="150" fill="#fda4af" font-weight="700" font-family="'JetBrains Mono', Consolas, monospace">sanitize_lut.py</text>
+      <text x="742" y="178">• 1D+3D 烘焙 &amp; 33pt 重采样</text>
+      <text x="742" y="204">• 严格 [0.0, 1.0] 安全钳位</text>
+      <text x="742" y="230">• --tame-shadow-chroma</text>
+      <text x="742" y="256">• --de-oscillate 阻尼</text>
+      <rect x="742" y="274" width="172" height="26" rx="6" fill="#2b161f" />
+      <text x="828" y="291" text-anchor="middle" fill="#fecdd3" font-size="11" font-family="'JetBrains Mono', Consolas, monospace">*_sony_safe_33.cube</text>
+    </g>
+  </g>
+
+  <line x1="932" y1="203" x2="952" y2="203" stroke="#10b981" stroke-width="2" marker-end="url(#arrowGreen)" />
+
+  <!-- Step 5 -->
+  <g>
+    <rect x="956" y="90" width="208" height="226" rx="12" fill="#0d1626" stroke="#10b981" stroke-opacity="0.6" stroke-width="1.3" />
+    <rect x="956" y="90" width="208" height="34" rx="12" fill="#0b241d" />
+    <rect x="956" y="112" width="208" height="12" fill="#0b241d" />
+    <text x="1060" y="112" text-anchor="middle" fill="#a7f3d0" font-size="13" font-weight="700" font-family="system-ui, 'Microsoft YaHei', sans-serif">5. 复检通过 · 安全上机</text>
+    <g font-family="system-ui, 'Microsoft YaHei', sans-serif" font-size="12" fill="#cbd5e1">
+      <text x="972" y="150" fill="#6ee7b7" font-weight="700">闭环验证 · 零风险监看</text>
+      <text x="972" y="178">• 越界值 &lt;0 / &gt;1 清零</text>
+      <text x="972" y="204">• 暗部底噪倍率回归安全</text>
+      <text x="972" y="230">• 纯 ASCII 无 BOM / 33³</text>
+      <text x="972" y="256">• 绝不覆盖原文件</text>
+      <rect x="972" y="274" width="176" height="26" rx="6" fill="#0d2b22" />
+      <text x="1060" y="291" text-anchor="middle" fill="#6ee7b7" font-size="11" font-weight="700" font-family="system-ui, 'Microsoft YaHei', sans-serif">VENICE / FX6 / FX3</text>
+    </g>
+  </g>
+
+  <!-- Loopback Verification Arrow -->
+  <path d="M 828 316 L 828 352 L 368 352 L 368 320" fill="none" stroke="#10b981" stroke-width="1.6" stroke-dasharray="5,4" marker-end="url(#arrowGreen)" />
+  <rect x="446" y="339" width="304" height="24" rx="12" fill="#0b241d" stroke="#10b981" stroke-opacity="0.6" stroke-width="1" />
+  <text x="598" y="355" text-anchor="middle" fill="#a7f3d0" font-size="11.5" font-weight="600" font-family="system-ui, 'Microsoft YaHei', sans-serif">修复副本强制二次复检（Closed-Loop Verification）</text>
+</svg>

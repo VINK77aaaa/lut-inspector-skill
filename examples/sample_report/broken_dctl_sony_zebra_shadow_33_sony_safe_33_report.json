@@ -1,0 +1,247 @@
+{
+  "file": "examples/broken_dctl_sony_zebra_shadow_33_sony_safe_33.cube",
+  "title": "broken_dctl_sony_zebra_shadow_33_SonySafe_33",
+  "target": "sony_cinealta",
+  "profile": "slog3",
+  "profile_name": "Sony S-Log3 / S-Gamut3.Cine (VENICE / FX6 / FX3)",
+  "summary": {
+    "status": "FAIL",
+    "score": 0,
+    "critical_count": 5,
+    "warning_count": 1,
+    "info_count": 0,
+    "parse_warnings": []
+  },
+  "findings": [
+    {
+      "severity": "CRITICAL",
+      "category": "高光/饱和度单调性反转 (Solarization)",
+      "symptom_impact": "【斑马纹/等高线条纹元凶】输入亮度升高时输出亮度突然反向跌落，导致渐变高光或亮色带出现暗色条纹！",
+      "evidence": "在 4 条测试斜坡发现反转，最严重为 [中性灰斜坡] 输入区间 [0.086, 0.888]（累计亮度倒跌 0.1304，最低斜率 -2.27）。",
+      "dctl_advice": "重点排查减法饱和度 (Subtractive Sat) / 密度 / Tetrahedral Warper DCTL！减小其高亮通道权重，或在进入 DCTL 前加 CST 开启 Tone & Gamut Mapping。"
+    },
+    {
+      "severity": "CRITICAL",
+      "category": "高频锯齿振荡 (Zebra / Banding 波形)",
+      "symptom_impact": "【典型斑马纹】输出曲线发生连续正负反复震荡，上机后会在连续影调中渲染出明暗交替的斑马条纹。",
+      "evidence": "在 [中性灰斜坡] 区间 [0.626, 0.908] 检测到 5 次正负交替锯齿翻转（单步跃迁最大 0.0935）。",
+      "dctl_advice": "检查是否忘记关闭 DCTL 的 Zebra / False Color / Gamut Warning 开关，或存在硬阈值分支与过激曲线震荡；可尝试 sanitize_lut.py --de-oscillate 做应急阻尼验证。"
+    },
+    {
+      "severity": "CRITICAL",
+      "category": "3D 色彩空间折叠 (Jacobian det(J) < 0)",
+      "symptom_impact": "【斑马纹/撕裂条纹元凶】LUT 立方体体素发生三维翻转穿插，插值路径在体素内混乱折返，产生网状/条纹裂变！",
+      "evidence": "共 1660/32768 个体素 (5.066%) 发生空间折叠，最小归一化 det(J)=-1.0671，最严重坐标≈[0.7812, 0.2812, 0.7812]。",
+      "dctl_advice": "排查高曲率 Hue-vs-Hue / Tetrahedral Color Warper / 极度色相挤压 DCTL，减小色相交界处的扭曲幅度。"
+    },
+    {
+      "severity": "CRITICAL",
+      "category": "极暗部近轴色度爆炸 (Shadow Chroma Explosion)",
+      "symptom_impact": "【极暗部彩噪/杂色斑元凶】在黑电平附近微小传感器热噪触发极高色度增益，画面暗部出现蠕动红/绿/蓝彩噪颗粒！",
+      "evidence": "在输入暗部近灰轴检测到 2 个色度爆炸体素，最大近轴色度增益=3.46x（输出色差达 0.216，坐标 [0.0625, 0.125, 0.0938] -> 输出 [0.0, 0.216, 0.0954]）；黑位底噪仿真显示色度噪点相对标准曲线放大 4.05 倍！",
+      "dctl_advice": "典型成因是 DCTL 在暗部计算饱和度/球面坐标时分母接近 0（如 1/(L+1e-4)）。请在 DCTL 内对暗部分母加安全下限（或 smoothstep 渐弱暗部饱和度），并在 Resolve 暗部做 Shadow Desat；应急上机可用 sanitize_lut.py --tame-shadow-chroma。"
+    },
+    {
+      "severity": "CRITICAL",
+      "category": "极暗部亮度增益斜率尖峰 (Shadow Slope Spike)",
+      "symptom_impact": "【极暗部颗粒粗噪点元凶】黑电平附近的微弱传感底噪被陡峭斜率等比例放大，产生明显暗部亮度颗粒感。",
+      "evidence": "极暗部 (0.0~0.17) 最大亮度斜率=1.96 (在输入 0.094 处)，单通道最大斜率=2.38，黑位亮度底噪相对标准曲线放大 4.09 倍。",
+      "dctl_advice": "检查是否重复叠加了两次 S-Log3->709 转换或暗部 Contrast/Pivot 过激；建议放松阴影 Toe 对比度并核对 S-Log3 黑位 (95/1023) 对应斜率。"
+    },
+    {
+      "severity": "WARNING",
+      "category": "四面体 vs 三线性插值严重分歧",
+      "symptom_impact": "【所见非所得条纹】在 Resolve 默认四面体插值下看似正常，导入三线性插值的机内监看后却裂开色阶或条带！",
+      "evidence": "体素中心最大差异 ΔRGB=0.0850 (位于 [0.0469, 0.1094, 0.0469])，P99 差异=0.0336。",
+      "dctl_advice": "在 DaVinci Resolve 的 Project Settings 中将 '3D Lookup Table Interpolation' 临时切为 Trilinear 即可在监看器上复现该差异，适当缓和该色彩区域的局部急转斜率。"
+    }
+  ],
+  "metrics": {
+    "hardware_and_range": {
+      "lut_1d_size": null,
+      "lut_3d_size": 33,
+      "effective_grid_size": 33,
+      "domain_min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "domain_max": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "has_bom": false,
+      "has_non_ascii_text": false,
+      "has_non_ascii_filename": false,
+      "nan_count": 0,
+      "inf_count": 0,
+      "negative_zero_count": 0,
+      "min_value": 0.0,
+      "max_value": 1.0,
+      "below_zero_count": 0,
+      "above_one_count": 0,
+      "below_zero_pct": 0.0,
+      "above_one_pct": 0.0,
+      "black_corner_out": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "white_corner_out": [
+        0.98835,
+        0.98835,
+        0.98835
+      ]
+    },
+    "monotonicity_and_zebra": {
+      "reversal_events": [
+        {
+          "ramp": "中性灰斜坡",
+          "key": "neutral_gray",
+          "t_range": [
+            0.086,
+            0.888
+          ],
+          "total_luma_drop": 0.1304,
+          "min_slope": -2.275,
+          "points": 49
+        },
+        {
+          "ramp": "暖肤色曝光斜坡",
+          "key": "warm_skin",
+          "t_range": [
+            0.841,
+            1.0
+          ],
+          "total_luma_drop": 0.0856,
+          "min_slope": -1.75,
+          "points": 34
+        },
+        {
+          "ramp": "高饱和青绿曝光斜坡",
+          "key": "sat_cyan_ramp",
+          "t_range": [
+            0.1,
+            0.953
+          ],
+          "total_luma_drop": 0.0371,
+          "min_slope": -1.055,
+          "points": 24
+        },
+        {
+          "ramp": "高饱和洋红曝光斜坡",
+          "key": "sat_magenta_ramp",
+          "t_range": [
+            0.886,
+            0.947
+          ],
+          "total_luma_drop": 0.0562,
+          "min_slope": -1.431,
+          "points": 31
+        }
+      ],
+      "oscillation_events": [
+        {
+          "ramp": "中性灰斜坡",
+          "key": "neutral_gray",
+          "flip_count": 5,
+          "t_range": [
+            0.626,
+            0.908
+          ],
+          "max_jump": 0.0935
+        },
+        {
+          "ramp": "暖肤色曝光斜坡",
+          "key": "warm_skin",
+          "flip_count": 2,
+          "t_range": [
+            0.814,
+            0.908
+          ],
+          "max_jump": 0.0407
+        }
+      ],
+      "step_events": [],
+      "axial_reversals": {
+        "R": 631,
+        "G": 216,
+        "B": 302,
+        "total": 1149,
+        "ratio_pct": 1.099
+      },
+      "gray_max_slope": 5.561,
+      "gray_min_slope": -2.275
+    },
+    "jacobian_folding": {
+      "folded_voxels": 1660,
+      "total_voxels": 32768,
+      "folded_pct": 5.0659,
+      "min_normalized_det_j": -1.0671,
+      "max_normalized_det_j": 11.2595,
+      "worst_folded_coord": [
+        0.7812,
+        0.2812,
+        0.7812
+      ]
+    },
+    "extreme_shadows": {
+      "max_shadow_luma_slope": 1.958,
+      "max_shadow_channel_slope": 2.375,
+      "max_slope_input_t": 0.0942,
+      "max_shadow_axis_chroma": 0.0102,
+      "max_near_axis_chroma": 0.216,
+      "max_shadow_chroma_gain": 3.457,
+      "chroma_explosion_voxels": 2,
+      "worst_chroma_coord": [
+        0.0625,
+        0.125,
+        0.0938
+      ],
+      "worst_chroma_out": [
+        0.0,
+        0.216,
+        0.0954
+      ],
+      "zero_step_jump": 0.0,
+      "monte_carlo_noise_sim": {
+        "test_center_input": 0.1049,
+        "input_sigma": 0.0035,
+        "ref_luma_std": 0.00134,
+        "lut_luma_std": 0.00547,
+        "luma_noise_amp_vs_ref": 4.09,
+        "ref_chroma_std": 0.00242,
+        "lut_chroma_std": 0.00979,
+        "chroma_noise_amp_vs_ref": 4.05,
+        "chroma_gain_over_input": 2.8,
+        "hw_wrap_triggered": false
+      }
+    },
+    "interpolation_divergence": {
+      "max_divergence_delta_rgb": 0.08504,
+      "p99_divergence_delta_rgb": 0.03363,
+      "mean_divergence_delta_rgb": 0.00554,
+      "worst_coord": [
+        0.0469,
+        0.1094,
+        0.0469
+      ]
+    },
+    "discontinuities_and_clipping": {
+      "max_adjacent_delta_rgb": 0.2267,
+      "p999_adjacent_delta_rgb": 0.1401,
+      "worst_jump_axis": "R",
+      "worst_jump_coord": [
+        0.0312,
+        0.125,
+        0.0938
+      ],
+      "highlight_clipped_cube_ratio_pct": 23.73
+    }
+  },
+  "artifacts": {
+    "diagnostics_png": "examples/sample_report/broken_dctl_sony_zebra_shadow_33_sony_safe_33_diagnostics.png",
+    "stress_test_png": "examples/sample_report/broken_dctl_sony_zebra_shadow_33_sony_safe_33_stress_test.png"
+  }
+}
