@@ -16,44 +16,44 @@
     {
       "severity": "CRITICAL",
       "category": "高光/饱和度单调性反转 (Solarization)",
-      "symptom_impact": "【斑马纹/等高线条纹元凶】输入亮度升高时输出亮度突然反向跌落，导致渐变高光或亮色带出现暗色条纹！",
-      "evidence": "在 4 条测试斜坡发现反转，最严重为 [中性灰斜坡] 输入区间 [0.086, 0.888]（累计亮度倒跌 0.1304，最低斜率 -2.27）。",
-      "dctl_advice": "重点排查减法饱和度 (Subtractive Sat) / 密度 / Tetrahedral Warper DCTL！减小其高亮通道权重，或在进入 DCTL 前加 CST 开启 Tone & Gamut Mapping。"
+      "symptom_impact": "【斑马纹/等高线条纹风险】输入曝光升高时输出亮度反向跌落，高光或亮色渐变处易形成反相暗条带。",
+      "evidence": "在 8 条物理曝光斜坡发现亮度反转，最严重为 [中性灰曝光斜坡] 输入均值区间 [0.657, 0.889]（累计倒跌 0.1227，最低斜率 -2.28）。",
+      "technical_note": "常见成因包括过激的通道相减、强行跨色相拉扯或非单调高光曲线，建议排查相应非线性变换模块。"
     },
     {
       "severity": "CRITICAL",
       "category": "高频锯齿振荡 (Zebra / Banding 波形)",
-      "symptom_impact": "【典型斑马纹】输出曲线发生连续正负反复震荡，上机后会在连续影调中渲染出明暗交替的斑马条纹。",
-      "evidence": "在 [中性灰斜坡] 区间 [0.626, 0.908] 检测到 5 次正负交替锯齿翻转（单步跃迁最大 0.0935）。",
-      "dctl_advice": "检查是否忘记关闭 DCTL 的 Zebra / False Color / Gamut Warning 开关，或存在硬阈值分支与过激曲线震荡；可尝试 sanitize_lut.py --de-oscillate 做应急阻尼验证。"
+      "symptom_impact": "【典型斑马纹波形】输出亮度随曝光递增连续正负往复震荡，机内监看将呈现明暗交替条纹。",
+      "evidence": "在 [暖肤色曝光斜坡] 区间 [0.635, 0.829] 检测到 4 次正负交替锯齿翻转（单步跃迁最大 0.0563）。",
+      "technical_note": "请检查导出前是否误开了 DCTL 内置 Zebra/False Color/Warning 指示开关，或存在未用 smoothstep 平滑的硬阈值分段。"
     },
     {
       "severity": "CRITICAL",
-      "category": "3D 色彩空间折叠 (Jacobian det(J) < 0)",
-      "symptom_impact": "【斑马纹/撕裂条纹元凶】LUT 立方体体素发生三维翻转穿插，插值路径在体素内混乱折返，产生网状/条纹裂变！",
-      "evidence": "共 1660/32768 个体素 (5.066%) 发生空间折叠，最小归一化 det(J)=-1.0671，最严重坐标≈[0.7812, 0.2812, 0.7812]。",
-      "dctl_advice": "排查高曲率 Hue-vs-Hue / Tetrahedral Color Warper / 极度色相挤压 DCTL，减小色相交界处的扭曲幅度。"
+      "category": "核心有效色域内部三维折叠 (Jacobian det(J) < 0)",
+      "symptom_impact": "【斑马纹/色彩撕裂风险】有效拍摄色彩区体素发生三维穿插翻转，插值时易出现网格状或条带状色彩错位。",
+      "evidence": "核心有效区共 13 个体素 (0.741%) 发生空间折叠，最小 det(J)=-0.3203，最严重坐标≈[0.0938, 0.1562, 0.0938]。",
+      "technical_note": "请检查高曲率色相局部扭曲或节点色彩空间变换是否存在自相交折叠。"
     },
     {
       "severity": "CRITICAL",
       "category": "极暗部近轴色度爆炸 (Shadow Chroma Explosion)",
       "symptom_impact": "【极暗部彩噪/杂色斑元凶】在黑电平附近微小传感器热噪触发极高色度增益，画面暗部出现蠕动红/绿/蓝彩噪颗粒！",
       "evidence": "在输入暗部近灰轴检测到 2 个色度爆炸体素，最大近轴色度增益=3.46x（输出色差达 0.216，坐标 [0.0625, 0.125, 0.0938] -> 输出 [0.0, 0.216, 0.0954]）；黑位底噪仿真显示色度噪点相对标准曲线放大 4.05 倍！",
-      "dctl_advice": "典型成因是 DCTL 在暗部计算饱和度/球面坐标时分母接近 0（如 1/(L+1e-4)）。请在 DCTL 内对暗部分母加安全下限（或 smoothstep 渐弱暗部饱和度），并在 Resolve 暗部做 Shadow Desat；应急上机可用 sanitize_lut.py --tame-shadow-chroma。"
+      "technical_note": "典型成因是 DCTL 在暗部计算饱和度/球面坐标时分母接近 0（如 1/(L+1e-4)）。请在 DCTL 内对暗部分母加安全下限（或 smoothstep 渐弱暗部饱和度），并在 Resolve 暗部做 Shadow Desat；应急上机可用 sanitize_lut.py --tame-shadow-chroma。"
     },
     {
       "severity": "CRITICAL",
       "category": "极暗部亮度增益斜率尖峰 (Shadow Slope Spike)",
       "symptom_impact": "【极暗部颗粒粗噪点元凶】黑电平附近的微弱传感底噪被陡峭斜率等比例放大，产生明显暗部亮度颗粒感。",
       "evidence": "极暗部 (0.0~0.17) 最大亮度斜率=1.96 (在输入 0.094 处)，单通道最大斜率=2.38，黑位亮度底噪相对标准曲线放大 4.09 倍。",
-      "dctl_advice": "检查是否重复叠加了两次 S-Log3->709 转换或暗部 Contrast/Pivot 过激；建议放松阴影 Toe 对比度并核对 S-Log3 黑位 (95/1023) 对应斜率。"
+      "technical_note": "检查是否重复叠加了两次 S-Log3->709 转换或暗部 Contrast/Pivot 过激；建议放松阴影 Toe 对比度并核对 S-Log3 黑位 (95/1023) 对应斜率。"
     },
     {
       "severity": "WARNING",
-      "category": "四面体 vs 三线性插值严重分歧",
-      "symptom_impact": "【所见非所得条纹】在 Resolve 默认四面体插值下看似正常，导入三线性插值的机内监看后却裂开色阶或条带！",
-      "evidence": "体素中心最大差异 ΔRGB=0.0850 (位于 [0.0469, 0.1094, 0.0469])，P99 差异=0.0336。",
-      "dctl_advice": "在 DaVinci Resolve 的 Project Settings 中将 '3D Lookup Table Interpolation' 临时切为 Trilinear 即可在监看器上复现该差异，适当缓和该色彩区域的局部急转斜率。"
+      "category": "四面体 vs 三线性插值显著分歧",
+      "symptom_impact": "【插值引擎差异风险】Resolve 四面体插值与机内三线性插值存在较大偏差，局部色区上机后可能出现阶梯纹理。",
+      "evidence": "物理有效色域最大差异 ΔRGB=0.0344 (位于 [0.9531, 0.7031, 0.1719])，P99=0.0316；全立方体最大=0.0850 (位于 [0.0469, 0.1094, 0.0469])。",
+      "technical_note": "在 DaVinci Resolve 的 Project Settings 中将 '3D Lookup Table Interpolation' 临时切为 Trilinear 即可在监看端复现该差异。"
     }
   ],
   "metrics": {
@@ -94,96 +94,225 @@
         0.98835
       ]
     },
+    "highlight_rolloff": {
+      "rolloff_status": "NON_MONOTONIC_HIGHLIGHT",
+      "rolloff_description": "高光区出现负斜率反转（非单调滚降）",
+      "black_point_out_y": 0.00999,
+      "mid_gray_out_y": 0.3743,
+      "white_90_out_y": 0.6905,
+      "peak_white_out_y": 0.9883,
+      "slope_mid_gray": 1.725,
+      "slope_white_90": 2.101,
+      "slope_highlight_mid": -0.017,
+      "slope_shoulder_end": -0.01,
+      "shoulder_decay_ratio": -0.002,
+      "gray_clip_onset_t": 0.8611,
+      "achromatic_white_clip_pct": 0.03,
+      "single_channel_ceiling_pct": 5.8,
+      "gamut_wall_projection_pct": 4.7
+    },
     "monotonicity_and_zebra": {
       "reversal_events": [
         {
-          "ramp": "中性灰斜坡",
-          "key": "neutral_gray",
+          "ramp": "中性灰曝光斜坡",
+          "key": "neutral_gray_ev",
           "t_range": [
-            0.086,
-            0.888
+            0.657,
+            0.889
           ],
-          "total_luma_drop": 0.1304,
-          "min_slope": -2.275,
-          "points": 49
+          "total_luma_drop": 0.1227,
+          "min_slope": -2.282,
+          "points": 43
         },
         {
           "ramp": "暖肤色曝光斜坡",
-          "key": "warm_skin",
+          "key": "warm_skin_ev",
           "t_range": [
-            0.841,
-            1.0
+            0.659,
+            0.888
           ],
-          "total_luma_drop": 0.0856,
-          "min_slope": -1.75,
-          "points": 34
+          "total_luma_drop": 0.1206,
+          "min_slope": -2.271,
+          "points": 44
         },
         {
-          "ramp": "高饱和青绿曝光斜坡",
-          "key": "sat_cyan_ramp",
+          "ramp": "深肤色曝光斜坡",
+          "key": "deep_skin_ev",
           "t_range": [
-            0.1,
-            0.953
+            0.66,
+            0.806
           ],
-          "total_luma_drop": 0.0371,
-          "min_slope": -1.055,
-          "points": 24
+          "total_luma_drop": 0.108,
+          "min_slope": -2.29,
+          "points": 37
         },
         {
-          "ramp": "高饱和洋红曝光斜坡",
-          "key": "sat_magenta_ramp",
+          "ramp": "高饱和橙曝光斜坡",
+          "key": "sat_orange_ev",
           "t_range": [
-            0.886,
-            0.947
+            0.661,
+            0.801
           ],
-          "total_luma_drop": 0.0562,
-          "min_slope": -1.431,
+          "total_luma_drop": 0.1128,
+          "min_slope": -2.333,
+          "points": 35
+        },
+        {
+          "ramp": "高饱和纯红曝光斜坡",
+          "key": "sat_red_ev",
+          "t_range": [
+            0.66,
+            0.796
+          ],
+          "total_luma_drop": 0.096,
+          "min_slope": -2.18,
           "points": 31
+        },
+        {
+          "ramp": "自然翠绿曝光斜坡",
+          "key": "sat_green_ev",
+          "t_range": [
+            0.657,
+            0.803
+          ],
+          "total_luma_drop": 0.1174,
+          "min_slope": -2.397,
+          "points": 36
+        },
+        {
+          "ramp": "高饱和青蓝曝光斜坡",
+          "key": "sat_cyan_ev",
+          "t_range": [
+            0.662,
+            0.89
+          ],
+          "total_luma_drop": 0.1081,
+          "min_slope": -2.182,
+          "points": 38
+        },
+        {
+          "ramp": "高饱和品红曝光斜坡",
+          "key": "sat_magenta_ev",
+          "t_range": [
+            0.659,
+            0.888
+          ],
+          "total_luma_drop": 0.1033,
+          "min_slope": -2.05,
+          "points": 40
         }
       ],
       "oscillation_events": [
         {
-          "ramp": "中性灰斜坡",
-          "key": "neutral_gray",
-          "flip_count": 5,
+          "ramp": "中性灰曝光斜坡",
+          "key": "neutral_gray_ev",
+          "flip_count": 3,
           "t_range": [
-            0.626,
-            0.908
+            0.615,
+            0.842
           ],
-          "max_jump": 0.0935
+          "max_jump": 0.1069
         },
         {
           "ramp": "暖肤色曝光斜坡",
-          "key": "warm_skin",
+          "key": "warm_skin_ev",
+          "flip_count": 4,
+          "t_range": [
+            0.635,
+            0.829
+          ],
+          "max_jump": 0.0563
+        },
+        {
+          "ramp": "深肤色曝光斜坡",
+          "key": "deep_skin_ev",
+          "flip_count": 4,
+          "t_range": [
+            0.617,
+            0.844
+          ],
+          "max_jump": 0.101
+        },
+        {
+          "ramp": "高饱和橙曝光斜坡",
+          "key": "sat_orange_ev",
+          "flip_count": 3,
+          "t_range": [
+            0.617,
+            0.779
+          ],
+          "max_jump": 0.0932
+        },
+        {
+          "ramp": "高饱和纯红曝光斜坡",
+          "key": "sat_red_ev",
           "flip_count": 2,
           "t_range": [
-            0.814,
-            0.908
+            0.636,
+            0.733
           ],
-          "max_jump": 0.0407
+          "max_jump": 0.0325
+        },
+        {
+          "ramp": "自然翠绿曝光斜坡",
+          "key": "sat_green_ev",
+          "flip_count": 3,
+          "t_range": [
+            0.671,
+            0.834
+          ],
+          "max_jump": 0.0676
+        },
+        {
+          "ramp": "高饱和青蓝曝光斜坡",
+          "key": "sat_cyan_ev",
+          "flip_count": 4,
+          "t_range": [
+            0.622,
+            0.849
+          ],
+          "max_jump": 0.0929
+        },
+        {
+          "ramp": "高饱和品红曝光斜坡",
+          "key": "sat_magenta_ev",
+          "flip_count": 4,
+          "t_range": [
+            0.635,
+            0.829
+          ],
+          "max_jump": 0.0592
         }
       ],
       "step_events": [],
       "axial_reversals": {
-        "R": 631,
-        "G": 216,
-        "B": 302,
-        "total": 1149,
-        "ratio_pct": 1.099
+        "R": 2,
+        "G": 10,
+        "B": 1,
+        "total": 13,
+        "ratio_pct": 0.012
       },
       "gray_max_slope": 5.561,
       "gray_min_slope": -2.275
     },
     "jacobian_folding": {
-      "folded_voxels": 1660,
+      "folded_voxels": 1450,
+      "core_folded_voxels": 13,
+      "boundary_folded_voxels": 1437,
       "total_voxels": 32768,
-      "folded_pct": 5.0659,
+      "folded_pct": 4.425,
       "min_normalized_det_j": -1.0671,
+      "min_core_normalized_det_j": -0.3203,
       "max_normalized_det_j": 11.2595,
       "worst_folded_coord": [
         0.7812,
         0.2812,
         0.7812
+      ],
+      "core_worst_folded_coord": [
+        0.0938,
+        0.1562,
+        0.0938
       ]
     },
     "extreme_shadows": {
@@ -222,10 +351,17 @@
       "max_divergence_delta_rgb": 0.08504,
       "p99_divergence_delta_rgb": 0.03363,
       "mean_divergence_delta_rgb": 0.00554,
+      "phys_max_divergence_delta_rgb": 0.03444,
+      "phys_p99_divergence_delta_rgb": 0.03158,
       "worst_coord": [
         0.0469,
         0.1094,
         0.0469
+      ],
+      "phys_worst_coord": [
+        0.9531,
+        0.7031,
+        0.1719
       ]
     },
     "discontinuities_and_clipping": {
@@ -236,8 +372,7 @@
         0.0312,
         0.125,
         0.0938
-      ],
-      "highlight_clipped_cube_ratio_pct": 23.73
+      ]
     }
   },
   "artifacts": {

@@ -51,6 +51,23 @@
         0.94635
       ]
     },
+    "highlight_rolloff": {
+      "rolloff_status": "SMOOTH_ROLLOFF",
+      "rolloff_description": "平滑肩部滚降（斜率从中段 1.88 逐步衰减至末端 0.10，峰值 0.9463）",
+      "black_point_out_y": 0.00848,
+      "mid_gray_out_y": 0.3743,
+      "white_90_out_y": 0.6905,
+      "peak_white_out_y": 0.9463,
+      "slope_mid_gray": 1.725,
+      "slope_white_90": 1.671,
+      "slope_highlight_mid": 0.575,
+      "slope_shoulder_end": 0.101,
+      "shoulder_decay_ratio": 0.054,
+      "gray_clip_onset_t": null,
+      "achromatic_white_clip_pct": 0.0,
+      "single_channel_ceiling_pct": 0.0,
+      "gamut_wall_projection_pct": 0.0
+    },
     "monotonicity_and_zebra": {
       "reversal_events": [],
       "oscillation_events": [],
@@ -67,11 +84,15 @@
     },
     "jacobian_folding": {
       "folded_voxels": 0,
+      "core_folded_voxels": 0,
+      "boundary_folded_voxels": 0,
       "total_voxels": 32768,
       "folded_pct": 0.0,
       "min_normalized_det_j": -0.0106,
+      "min_core_normalized_det_j": 0.0063,
       "max_normalized_det_j": 8.678,
-      "worst_folded_coord": null
+      "worst_folded_coord": null,
+      "core_worst_folded_coord": null
     },
     "extreme_shadows": {
       "max_shadow_luma_slope": 0.817,
@@ -109,10 +130,17 @@
       "max_divergence_delta_rgb": 0.02431,
       "p99_divergence_delta_rgb": 0.00944,
       "mean_divergence_delta_rgb": 0.00101,
+      "phys_max_divergence_delta_rgb": 0.01329,
+      "phys_p99_divergence_delta_rgb": 0.00674,
       "worst_coord": [
         0.1094,
         0.5781,
         0.5781
+      ],
+      "phys_worst_coord": [
+        0.3281,
+        0.1094,
+        0.6094
       ]
     },
     "discontinuities_and_clipping": {
@@ -123,8 +151,7 @@
         0.0,
         0.5625,
         0.5625
-      ],
-      "highlight_clipped_cube_ratio_pct": 0.0
+      ]
     }
   },
   "artifacts": {

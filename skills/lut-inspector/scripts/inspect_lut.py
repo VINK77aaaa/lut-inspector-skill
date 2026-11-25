@@ -50,6 +50,201 @@ class CameraProfile:
     sub_black_zone: Tuple[float, float]
     highlight_zone: Tuple[float, float]
     notes: str
+    gamut_to_rec709: Tuple[Tuple[float, float, float], Tuple[float, float, float], Tuple[float, float, float]]
+
+
+def _slog3_to_lin(p: np.ndarray) -> np.ndarray:
+    thresh = 171.2102946929 / 1023.0
+    return np.where(
+        p >= thresh,
+        np.power(10.0, (p * 1023.0 - 420.0) / 261.5) * 0.19 - 0.01,
+        (p * 1023.0 - 95.0) * 0.01125 / (171.2102946929 - 95.0),
+    )
+
+
+def _lin_to_slog3(x: np.ndarray) -> np.ndarray:
+    x_c = np.maximum(x, -0.01)
+    cut = 0.01125000
+    out = np.where(
+        x_c >= cut,
+        (420.0 + np.log10(np.maximum((x_c + 0.01) / 0.19, 1e-6)) * 261.5) / 1023.0,
+        (x_c * (171.2102946929 - 95.0) / 0.01125000 + 95.0) / 1023.0,
+    )
+    return np.clip(out, 0.0, 1.0)
+
+
+def _logc3_to_lin(p: np.ndarray) -> np.ndarray:
+    cut = 0.1496582
+    return np.where(
+        p > cut,
+        (np.power(10.0, (p - 0.385537) / 0.247190) - 0.052272) / 5.555556,
+        (p - 0.092809) / 5.367655,
+    )
+
+
+def _lin_to_logc3(x: np.ndarray) -> np.ndarray:
+    cut = 0.010591
+    out = np.where(
+        x > cut,
+        0.247190 * np.log10(np.maximum(5.555556 * x + 0.052272, 1e-6)) + 0.385537,
+        5.367655 * x + 0.092809,
+    )
+    return np.clip(out, 0.0, 1.0)
+
+
+def _logc4_to_lin(p: np.ndarray) -> np.ndarray:
+    a = (262144.0 - 16.0) / 117.45
+    b = (1023.0 - 95.0) / 1023.0
+    c = 95.0 / 1023.0
+    s = (7.0 * math.log(2.0) * (2.0 ** (7.0 - 14.0 * c / b))) / a
+    t_val = (2.0 ** (14.0 * (-c / b) + 6.0) - 64.0) / a
+    return np.where(
+        p >= 0.0,
+        (np.power(2.0, 14.0 * (p - c) / b + 6.0) - 64.0) / a,
+        p * s + t_val,
+    )
+
+
+def _lin_to_logc4(x: np.ndarray) -> np.ndarray:
+    a = (262144.0 - 16.0) / 117.45
+    b = (1023.0 - 95.0) / 1023.0
+    c = 95.0 / 1023.0
+    s = (7.0 * math.log(2.0) * (2.0 ** (7.0 - 14.0 * c / b))) / a
+    t_val = (2.0 ** (14.0 * (-c / b) + 6.0) - 64.0) / a
+    out = np.where(
+        x >= t_val,
+        (np.log2(np.maximum(a * x + 64.0, 1e-6)) - 6.0) / 14.0 * b + c,
+        (x - t_val) / s,
+    )
+    return np.clip(out, 0.0, 1.0)
+
+
+def _vlog_to_lin(p: np.ndarray) -> np.ndarray:
+    return np.where(
+        p < 0.181,
+        (p - 0.125) / 5.6,
+        np.power(10.0, (p - 0.598206) / 0.241514) - 0.00873,
+    )
+
+
+def _lin_to_vlog(x: np.ndarray) -> np.ndarray:
+    out = np.where(
+        x < 0.01,
+        5.6 * x + 0.125,
+        0.241514 * np.log10(np.maximum(x + 0.00873, 1e-6)) + 0.598206,
+    )
+    return np.clip(out, 0.0, 1.0)
+
+
+def _log3g10_to_lin(p: np.ndarray) -> np.ndarray:
+    return np.where(
+        p < 0.0,
+        p / 15.1927 - 0.01,
+        (np.power(10.0, p / 0.224282) - 1.0) / 155.975327 - 0.01,
+    )
+
+
+def _lin_to_log3g10(x: np.ndarray) -> np.ndarray:
+    xp = x + 0.01
+    out = np.where(
+        xp < 0.0,
+        xp * 15.1927,
+        0.224282 * np.log10(np.maximum(xp * 155.975327 + 1.0, 1e-6)),
+    )
+    return np.clip(out, 0.0, 1.0)
+
+
+def _clog3_to_lin(p: np.ndarray) -> np.ndarray:
+    c1, c2, c3, c4, c5, c6 = 0.36726845, 14.98325, 0.12783901, 1.9754798, 0.12512219, 0.12240537
+    return np.where(
+        p >= c5,
+        (np.power(10.0, (p - c3) / c1) - 1.0) / c2,
+        np.where(
+            p >= c6,
+            (p - c5) / c4,
+            -(np.power(10.0, (c3 - p) / c1) - 1.0) / c2,
+        ),
+    )
+
+
+def _lin_to_clog3(x: np.ndarray) -> np.ndarray:
+    c1, c2, c3, c4, c5 = 0.36726845, 14.98325, 0.12783901, 1.9754798, 0.12512219
+    out = np.where(
+        x >= 0.014,
+        c1 * np.log10(np.maximum(x * c2 + 1.0, 1e-6)) + c3,
+        np.where(
+            x >= -0.014,
+            c4 * x + c5,
+            -c1 * np.log10(np.maximum(-x * c2 + 1.0, 1e-6)) + c3,
+        ),
+    )
+    return np.clip(out, 0.0, 1.0)
+
+
+def _di_to_lin(p: np.ndarray) -> np.ndarray:
+    return np.where(
+        p <= 0.02740668,
+        p / 10.44426855,
+        np.power(2.0, p / 0.07329248 - 7.0) - 0.0075,
+    )
+
+
+def _lin_to_di(x: np.ndarray) -> np.ndarray:
+    out = np.where(
+        x <= 0.00262409,
+        x * 10.44426855,
+        (np.log2(np.maximum(x + 0.0075, 1e-6)) + 7.0) * 0.07329248,
+    )
+    return np.clip(out, 0.0, 1.0)
+
+
+def _acescct_to_lin(p: np.ndarray) -> np.ndarray:
+    return np.where(
+        p <= 0.155251141552511,
+        (p - 0.0729055341958355) / 10.5402377416545,
+        np.power(2.0, p * 17.52 - 9.72),
+    )
+
+
+def _lin_to_acescct(x: np.ndarray) -> np.ndarray:
+    out = np.where(
+        x <= 0.0078125,
+        10.5402377416545 * x + 0.0729055341958355,
+        (np.log2(np.maximum(x, 1e-6)) + 9.72) / 17.52,
+    )
+    return np.clip(out, 0.0, 1.0)
+
+
+def _rec709_to_lin(p: np.ndarray) -> np.ndarray:
+    return np.power(np.clip(p, 0.0, 1.0), 2.4)
+
+
+def _lin_to_rec709(x: np.ndarray) -> np.ndarray:
+    return np.clip(np.power(np.maximum(x, 0.0), 1.0 / 2.4), 0.0, 1.0)
+
+
+PROFILE_TRANSFORMS: Dict[str, Tuple[Any, Any]] = {
+    "slog3": (_slog3_to_lin, _lin_to_slog3),
+    "logc3": (_logc3_to_lin, _lin_to_logc3),
+    "logc4": (_logc4_to_lin, _lin_to_logc4),
+    "vlog": (_vlog_to_lin, _lin_to_vlog),
+    "log3g10": (_log3g10_to_lin, _lin_to_log3g10),
+    "clog3": (_clog3_to_lin, _lin_to_clog3),
+    "davinci_intermediate": (_di_to_lin, _lin_to_di),
+    "acescct": (_acescct_to_lin, _lin_to_acescct),
+    "rec709": (_rec709_to_lin, _lin_to_rec709),
+    "generic_log": (_slog3_to_lin, _lin_to_slog3),
+}
+
+
+def profile_log_to_lin(profile: CameraProfile, p: np.ndarray) -> np.ndarray:
+    fn, _ = PROFILE_TRANSFORMS[profile.key]
+    return fn(np.asarray(p, dtype=np.float64))
+
+
+def profile_lin_to_log(profile: CameraProfile, x: np.ndarray) -> np.ndarray:
+    _, fn = PROFILE_TRANSFORMS[profile.key]
+    return fn(np.asarray(x, dtype=np.float64))
 
 
 PROFILES: Dict[str, CameraProfile] = {
@@ -63,6 +258,11 @@ PROFILES: Dict[str, CameraProfile] = {
         sub_black_zone=(0.0, 95.0 / 1023.0),
         highlight_zone=(0.55, 0.92),
         notes="10-bit 0% 黑电平在 95/1023 (0.092864)，紧贴 33点晶格第3层 (3/32=0.09375)",
+        gamut_to_rec709=(
+            (1.84677897, -0.52598612, -0.32079285),
+            (-0.14445175, 1.32073580, -0.17628405),
+            (0.04721461, -0.20081803, 1.15360342),
+        ),
     ),
     "logc3": CameraProfile(
         key="logc3",
@@ -74,6 +274,11 @@ PROFILES: Dict[str, CameraProfile] = {
         sub_black_zone=(0.0, 0.092864),
         highlight_zone=(0.54, 0.90),
         notes="ARRI LogC3 EI800 标准黑位约 0.0929，18% 灰约 0.391",
+        gamut_to_rec709=(
+            (1.617523, -0.537287, -0.080237),
+            (-0.070573, 1.334613, -0.264040),
+            (-0.021102, -0.226954, 1.248056),
+        ),
     ),
     "logc4": CameraProfile(
         key="logc4",
@@ -85,6 +290,11 @@ PROFILES: Dict[str, CameraProfile] = {
         sub_black_zone=(0.0, 0.092864),
         highlight_zone=(0.45, 0.88),
         notes="ARRI LogC4 高动态范围曲线，18% 灰更低 (0.2784)",
+        gamut_to_rec709=(
+            (1.594173, -0.369435, -0.224738),
+            (-0.143668, 1.318619, -0.174951),
+            (0.022699, -0.176912, 1.154213),
+        ),
     ),
     "vlog": CameraProfile(
         key="vlog",
@@ -96,6 +306,11 @@ PROFILES: Dict[str, CameraProfile] = {
         sub_black_zone=(0.0, 128.0 / 1023.0),
         highlight_zone=(0.58, 0.92),
         notes="V-Log 0% 黑位 128/1023 (0.1251)，18% 灰约 0.423",
+        gamut_to_rec709=(
+            (1.806576, -0.549904, -0.256672),
+            (-0.123526, 1.277562, -0.154036),
+            (0.004628, -0.163109, 1.158481),
+        ),
     ),
     "log3g10": CameraProfile(
         key="log3g10",
@@ -107,6 +322,11 @@ PROFILES: Dict[str, CameraProfile] = {
         sub_black_zone=(0.0, 0.02),
         highlight_zone=(0.52, 0.90),
         notes="RED Log3G10 黑位在 0.0 附近，18% 灰在 1/3 (0.3333)",
+        gamut_to_rec709=(
+            (2.238451, -0.971807, -0.266644),
+            (-0.219428, 1.434218, -0.214790),
+            (0.001053, -0.354745, 1.353692),
+        ),
     ),
     "clog3": CameraProfile(
         key="clog3",
@@ -118,6 +338,11 @@ PROFILES: Dict[str, CameraProfile] = {
         sub_black_zone=(0.0, 128.0 / 1023.0),
         highlight_zone=(0.54, 0.90),
         notes="Canon Log 3 黑位约 128/1023 (0.1251)",
+        gamut_to_rec709=(
+            (1.883467, -0.601201, -0.282266),
+            (-0.072578, 1.298186, -0.225608),
+            (0.004861, -0.211618, 1.206757),
+        ),
     ),
     "davinci_intermediate": CameraProfile(
         key="davinci_intermediate",
@@ -129,6 +354,11 @@ PROFILES: Dict[str, CameraProfile] = {
         sub_black_zone=(0.0, 0.02),
         highlight_zone=(0.52, 0.90),
         notes="DaVinci Intermediate 18% 灰在 0.3360",
+        gamut_to_rec709=(
+            (1.741827, -0.546950, -0.194877),
+            (-0.130639, 1.258476, -0.127837),
+            (0.036922, -0.167058, 1.130136),
+        ),
     ),
     "acescct": CameraProfile(
         key="acescct",
@@ -140,6 +370,11 @@ PROFILES: Dict[str, CameraProfile] = {
         sub_black_zone=(0.0, 0.072905),
         highlight_zone=(0.55, 0.92),
         notes="ACEScct 18% 灰 0.4136，趾部线性起点 0.0729",
+        gamut_to_rec709=(
+            (1.705051, -0.621792, -0.083259),
+            (-0.130256, 1.140805, -0.010548),
+            (-0.024003, -0.128969, 1.152972),
+        ),
     ),
     "rec709": CameraProfile(
         key="rec709",
@@ -151,6 +386,7 @@ PROFILES: Dict[str, CameraProfile] = {
         sub_black_zone=(0.0, 0.01),
         highlight_zone=(0.75, 0.99),
         notes="显示域 Rec.709 曲线",
+        gamut_to_rec709=((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
     ),
     "generic_log": CameraProfile(
         key="generic_log",
@@ -162,6 +398,11 @@ PROFILES: Dict[str, CameraProfile] = {
         sub_black_zone=(0.0, 0.09),
         highlight_zone=(0.55, 0.92),
         notes="通用摄影机 Log 预设",
+        gamut_to_rec709=(
+            (1.84677897, -0.52598612, -0.32079285),
+            (-0.14445175, 1.32073580, -0.17628405),
+            (0.04721461, -0.20081803, 1.15360342),
+        ),
     ),
 }
 
@@ -623,7 +864,7 @@ def check_hardware_and_range(
                 "category": "硬件格式兼容性 (1D+3D 复合 Shaper)",
                 "symptom_impact": "机内加载失败或暗部/高光曲线完全错位",
                 "evidence": f"检测到混合 LUT_1D_SIZE={parsed.lut_1d_size} 与 LUT_3D_SIZE={parsed.lut_3d_size}。",
-                "dctl_advice": "Sony VENICE / FX6 / FX3 机内仅支持纯 3D LUT。请使用 sanitize_lut.py 将 1D+3D 烘焙合并为标准 33 点 3D .cube。",
+                "technical_note": "Sony VENICE / FX6 / FX3 机内仅支持纯 3D LUT。请使用 sanitize_lut.py 将 1D+3D 烘焙合并为标准 33 点 3D .cube。",
             }
         )
     elif parsed.lut_3d_size is None:
@@ -633,7 +874,7 @@ def check_hardware_and_range(
                 "category": "硬件格式兼容性 (仅 1D LUT)",
                 "symptom_impact": "摄影机无法作为 User 3D LUT 加载",
                 "evidence": f"文件仅包含 LUT_1D_SIZE={parsed.lut_1d_size}。",
-                "dctl_advice": "请从 DaVinci Resolve 导出 33 Point 3D Cube，或使用 sanitize_lut.py 转换。",
+                "technical_note": "请从 DaVinci Resolve 导出 33 Point 3D Cube，或使用 sanitize_lut.py 转换。",
             }
         )
     elif is_sony and parsed.lut_3d_size not in (17, 33):
@@ -643,7 +884,7 @@ def check_hardware_and_range(
                 "category": "Sony 机内晶格尺寸不兼容",
                 "symptom_impact": "VENICE / FX6 / FX3 无法导入或截断加载失败",
                 "evidence": f"当前 LUT_3D_SIZE={parsed.lut_3d_size}（Sony 机内标准为 33 点，部分机型兼容 17 点）。",
-                "dctl_advice": "在 Resolve 导出时选择 '33 Point Cube'，或运行 sanitize_lut.py --size 33 使用四面体高精度重采样转换。",
+                "technical_note": "在 Resolve 导出时选择 '33 Point Cube'，或运行 sanitize_lut.py --size 33 使用四面体高精度重采样转换。",
             }
         )
 
@@ -658,7 +899,7 @@ def check_hardware_and_range(
                 "category": "非标准输入值域 (DOMAIN_MIN / DOMAIN_MAX)",
                 "symptom_impact": "机内忽略或错位映射 DOMAIN 导致整体黑灰发闷或高光提早炸掉",
                 "evidence": f"DOMAIN_MIN={parsed.domain_min.tolist()}, DOMAIN_MAX={parsed.domain_max.tolist()}。",
-                "dctl_advice": "确保 Resolve 导出域为标准 [0.0, 1.0] 规范化域，不要使用带 Shaper 偏移的自定义 DOMAIN。",
+                "technical_note": "确保 Resolve 导出域为标准 [0.0, 1.0] 规范化域，不要使用带 Shaper 偏移的自定义 DOMAIN。",
             }
         )
 
@@ -677,7 +918,7 @@ def check_hardware_and_range(
                 "category": "机内文件编码与命名兼容性",
                 "symptom_impact": "Sony 读卡菜单可能无法识别文件或显示乱码",
                 "evidence": "；".join(reasons) + "。",
-                "dctl_advice": "上机前改用纯英文数字文件名（如 Look_SLog3_v1.cube），并以无 BOM ASCII 格式保存（sanitize_lut.py 会自动处理）。",
+                "technical_note": "上机前改用纯英文数字文件名（如 Look_SLog3_v1.cube），并以无 BOM ASCII 格式保存（sanitize_lut.py 会自动处理）。",
             }
         )
 
@@ -689,7 +930,7 @@ def check_hardware_and_range(
                 "category": "非法浮点数值 (NaN / Inf)",
                 "symptom_impact": "机内跳变出纯黑/纯白撕裂块噪点，严重者引发加载失败",
                 "evidence": f"发现 NaN={parsed.nan_count} 个，Inf={parsed.inf_count} 个。",
-                "dctl_advice": "典型成因是 DCTL 中 _powf(x, gamma) 传入负值或除零未加保护！请修改 DCTL 为 _powf(_fmaxf(x, 0.0f), gamma)，并用 sanitize_lut.py --fix-nan 修补。",
+                "technical_note": "典型成因是 DCTL 中 _powf(x, gamma) 传入负值或除零未加保护！请修改 DCTL 为 _powf(_fmaxf(x, 0.0f), gamma)，并用 sanitize_lut.py --fix-nan 修补。",
             }
         )
 
@@ -701,7 +942,7 @@ def check_hardware_and_range(
                 "category": "输出超界 > 1.0 (机内定点溢出回绕风险)",
                 "symptom_impact": "【斑马纹/条纹元凶】在达芬奇32位视口显示纯白正常，套入 Sony 定点管线后 >1.0 可能溢出回绕为黑色/补色条纹！",
                 "evidence": f"最大值 {max_val:.5f}，共 {pos_over_count}/{total_scalars} 个通道值超出 1.0（{pos_over_count/total_scalars*100:.2f}%），示例输入坐标: {pos_over_coords[:3]}。",
-                "dctl_advice": "在 DCTL 末尾或 Resolve 最后一个节点加上 [0.0, 1.0] 钳位/高光柔滚降（_saturatef）；或运行 sanitize_lut.py --clamp 应急修复。",
+                "technical_note": "在 DCTL 末尾或 Resolve 最后一个节点加上 [0.0, 1.0] 钳位/高光柔滚降（_saturatef）；或运行 sanitize_lut.py --clamp 应急修复。",
             }
         )
 
@@ -713,7 +954,7 @@ def check_hardware_and_range(
                 "category": "输出负值 < 0.0 (暗部无符号下溢闪点)",
                 "symptom_impact": "【极暗部噪点/彩点元凶】负值在机内无符号定点硬件中会下溢回绕成 0.99+ 的高饱和彩色/白色随机闪点！",
                 "evidence": f"最小值 {min_val:.5f}，共 {neg_count}/{total_scalars} 个通道值低于 0.0（{neg_count/total_scalars*100:.2f}%），示例输入坐标: {neg_coords[:3]}。",
-                "dctl_advice": "S-Gamut3.Cine 转 Rec.709 矩阵或减法 Lift 易在暗部产生负值。请在 DCTL 输出前执行 _fmaxf(out, 0.0f)，或使用 sanitize_lut.py --clamp。",
+                "technical_note": "S-Gamut3.Cine 转 Rec.709 矩阵或减法 Lift 易在暗部产生负值。请在 DCTL 输出前执行 _fmaxf(out, 0.0f)，或使用 sanitize_lut.py --clamp。",
             }
         )
 
@@ -730,7 +971,7 @@ def check_hardware_and_range(
                 "category": "疑似 Video / Legal Range (64-940) 压缩导出",
                 "symptom_impact": "黑位被强制抬升至 ~0.063（发灰），高光被压在 ~0.919",
                 "evidence": f"输入 (0,0,0) 输出={np.round(black_corner,4).tolist()}，(1,1,1) 输出={np.round(white_corner,4).tolist()}。",
-                "dctl_advice": "请核查 DaVinci Resolve 中素材与时间线的 Data/Video Levels 设置，Sony 机内 3D LUT 标准应使用 Full Data [0.0, 1.0] 动态范围。",
+                "technical_note": "请核查 DaVinci Resolve 中素材与时间线的 Data/Video Levels 设置，Sony 机内 3D LUT 标准应使用 Full Data [0.0, 1.0] 动态范围。",
             }
         )
 
@@ -758,68 +999,200 @@ def check_hardware_and_range(
     return metrics, findings
 
 
+def check_highlight_rolloff(
+    grid: np.ndarray, profile: CameraProfile
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """
+    专项检查：高光肩部滚降 (Highlight Roll-off)、影调锚点与真死白硬削波 vs 宽色域外壁投影区分。
+    注意：影调锚点（如 18% 灰或白点绝对值偏移）属于创意 Look 范畴，仅作客观数据记录，不扣分；
+          宽色域输入经色域映射投影到目标色域边界壁（单通道=1.0、其余通道<1.0）属于正常色域压缩，不扣分。
+    """
+    findings: List[Dict[str, Any]] = []
+    n_samples = 512
+    t = np.linspace(0.0, 1.0, n_samples, dtype=np.float64)
+    dt = t[1] - t[0]
+    gray_pts = np.stack([t, t, t], axis=-1)
+    gray_out = eval_trilinear(grid, gray_pts)
+    gray_y = luma_709(gray_out)
+    dy_dt = np.diff(gray_y) / dt
+    t_mid = 0.5 * (t[:-1] + t[1:])
+
+    def _interp_y(val: float) -> float:
+        return float(np.interp(val, t, gray_y))
+
+    def _interp_slope(val: float, half_win: float = 0.035) -> float:
+        w_mask = (t_mid >= val - half_win) & (t_mid <= val + half_win)
+        if np.any(w_mask):
+            return float(np.mean(dy_dt[w_mask]))
+        return float(np.interp(val, t_mid, dy_dt))
+
+    black_out_y = _interp_y(profile.black_point)
+    mid_gray_out_y = _interp_y(profile.mid_gray)
+    white_90_out_y = _interp_y(profile.white_point)
+    peak_white_out_y = float(gray_y[-1])
+
+    slope_mid = _interp_slope(profile.mid_gray)
+    slope_white90 = _interp_slope(profile.white_point)
+    slope_hi_mid = _interp_slope(min(0.82, max(0.76, profile.white_point + 0.18)))
+    end_mask = t_mid >= 0.88
+    slope_shoulder_end = float(np.mean(dy_dt[end_mask])) if np.any(end_mask) else float(dy_dt[-1])
+
+    # 参考中段最大斜率（兼容暗调或低对比 Look）
+    mid_band = (t_mid >= 0.25) & (t_mid <= 0.65)
+    ref_slope = max(slope_mid, float(np.max(dy_dt[mid_band])) if np.any(mid_band) else 1.0, 1e-4)
+    shoulder_decay_ratio = slope_shoulder_end / ref_slope
+
+    # 检测中性灰轴首次进入死白硬削平 (>= 0.997) 的位置
+    clip_idx = np.where((gray_y >= 0.997) | (np.min(gray_out, axis=-1) >= 0.997))[0]
+    gray_clip_onset_t: Optional[float] = float(t[clip_idx[0]]) if clip_idx.size > 0 else None
+
+    # 3D 立方体拆分统计：全白硬削波 vs 单通道宽色域外壁投影
+    n = grid.shape[0]
+    axes = np.linspace(0.0, 1.0, n, dtype=np.float64)
+    rr, gg, bb = np.meshgrid(axes, axes, axes, indexing="ij")
+    in_pts = np.stack([rr, gg, bb], axis=-1)
+    m_to_709 = np.asarray(profile.gamut_to_rec709, dtype=np.float64)
+    lin_cam = profile_log_to_lin(profile, in_pts)
+    lin_709 = lin_cam @ m_to_709.T
+
+    achromatic_white_clip_pct = float(np.mean(np.min(grid, axis=-1) >= 0.997) * 100.0)
+    any_ch_ceil = np.max(grid, axis=-1) >= 0.999
+    non_achromatic = (np.max(grid, axis=-1) - np.min(grid, axis=-1)) > 0.02
+    out_of_709 = np.any(lin_709 < 0.0, axis=-1) | np.any(lin_709 > 1.0, axis=-1)
+    single_channel_ceiling_pct = float(np.mean(any_ch_ceil) * 100.0)
+    gamut_wall_projection_pct = float(np.mean(any_ch_ceil & non_achromatic & out_of_709) * 100.0)
+
+    # 高光滚降分类判决
+    hi_mask = t_mid >= profile.white_point
+    min_hi_slope = float(np.min(dy_dt[hi_mask])) if np.any(hi_mask) else 0.0
+
+    if min_hi_slope < -0.5:
+        rolloff_status = "NON_MONOTONIC_HIGHLIGHT"
+        rolloff_desc = "高光区出现负斜率反转（非单调滚降）"
+    elif gray_clip_onset_t is not None and gray_clip_onset_t < 0.84:
+        # 提前在输入 < 0.84 撞死白，检查撞顶前的肩部衰减是否充分
+        pre_mask = (t_mid >= max(0.45, gray_clip_onset_t - 0.10)) & (t_mid <= gray_clip_onset_t)
+        pre_clip_slope = float(np.mean(dy_dt[pre_mask])) if np.any(pre_mask) else ref_slope
+        if pre_clip_slope / ref_slope > 0.45:
+            rolloff_status = "HARD_CLIP_NO_ROLLOFF"
+            rolloff_desc = f"硬削波无明显肩部滚降（中性灰在输入 {gray_clip_onset_t:.3f} 处直接撞死 1.0）"
+            findings.append(
+                {
+                    "severity": "WARNING",
+                    "category": "高光缺乏平滑滚降 (Hard Clipping)",
+                    "symptom_impact": "过曝高光在达到上限前缺乏渐进肩部过渡，在输入 ≥ "
+                    f"{gray_clip_onset_t:.2f} 处直接被削平为纯白细节丢失。",
+                    "evidence": f"中性灰在 {gray_clip_onset_t:.3f} 触及 1.0 平顶，撞顶前斜率仍达 {pre_clip_slope:.2f} (相对中灰比 {pre_clip_slope/ref_slope:.2f})。",
+                    "technical_note": "如需保留更多高光层次，可在输出变换或末端启用 Tone Mapping / Soft Clip 肩部滚降曲线。",
+                }
+            )
+        else:
+            rolloff_status = "GENTLE_ROLLOFF_TO_CLIP"
+            rolloff_desc = f"带肩部衰减并在极高光 ({gray_clip_onset_t:.3f}) 收敛至纯白上限"
+    elif shoulder_decay_ratio < 0.42 or slope_shoulder_end < 0.45:
+        rolloff_status = "SMOOTH_ROLLOFF"
+        rolloff_desc = (
+            f"平滑肩部滚降（斜率从中段 {ref_slope:.2f} 逐步衰减至末端 {slope_shoulder_end:.2f}，峰值 {peak_white_out_y:.4f}）"
+        )
+    else:
+        rolloff_status = "GENTLE_ROLLOFF_TO_CLIP"
+        rolloff_desc = f"线性延伸至末端（峰值 {peak_white_out_y:.4f}，末端斜率 {slope_shoulder_end:.2f}）"
+
+    metrics = {
+        "rolloff_status": rolloff_status,
+        "rolloff_description": rolloff_desc,
+        "black_point_out_y": round(black_out_y, 5),
+        "mid_gray_out_y": round(mid_gray_out_y, 4),
+        "white_90_out_y": round(white_90_out_y, 4),
+        "peak_white_out_y": round(peak_white_out_y, 4),
+        "slope_mid_gray": round(slope_mid, 3),
+        "slope_white_90": round(slope_white90, 3),
+        "slope_highlight_mid": round(slope_hi_mid, 3),
+        "slope_shoulder_end": round(slope_shoulder_end, 3),
+        "shoulder_decay_ratio": round(shoulder_decay_ratio, 3),
+        "gray_clip_onset_t": round(gray_clip_onset_t, 4) if gray_clip_onset_t is not None else None,
+        "achromatic_white_clip_pct": round(achromatic_white_clip_pct, 2),
+        "single_channel_ceiling_pct": round(single_channel_ceiling_pct, 2),
+        "gamut_wall_projection_pct": round(gamut_wall_projection_pct, 2),
+    }
+    return metrics, findings
+
+
 def check_monotonicity_and_zebra(
     grid: np.ndarray, profile: CameraProfile
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]], Dict[str, np.ndarray]]:
     """
-    第 2 项检查：单调性反转 (Solarization)、高频锯齿振荡 (Zebra Oscillation) 与硬阶跃断层。
+    第 2 项检查：基于真实场景线性相机曝光扫描的单调性反转 (Solarization)、
+    高频锯齿振荡 (Zebra Oscillation) 与硬阶跃断层检测。
     """
     findings: List[Dict[str, Any]] = []
     n_samples = 512
     t = np.linspace(0.0, 1.0, n_samples, dtype=np.float64)
     dt = t[1] - t[0]
 
-    ramps: Dict[str, Tuple[str, np.ndarray]] = {
-        "neutral_gray": ("中性灰斜坡", np.stack([t, t, t], axis=-1)),
-        "warm_skin": (
-            "暖肤色曝光斜坡",
-            np.stack([t, np.clip(0.78 * t, 0, 1), np.clip(0.58 * t, 0, 1)], axis=-1),
-        ),
-        "red_ramp": ("纯红通道斜坡", np.stack([t, np.zeros_like(t), np.zeros_like(t)], axis=-1)),
-        "green_ramp": ("纯绿通道斜坡", np.stack([np.zeros_like(t), t, np.zeros_like(t)], axis=-1)),
-        "blue_ramp": ("纯蓝通道斜坡", np.stack([np.zeros_like(t), np.zeros_like(t), t], axis=-1)),
-        "sat_orange_ramp": (
-            "高饱和橙红曝光斜坡",
-            np.stack([np.clip(t * 1.15, 0, 1), np.clip(t * 0.65, 0, 1), np.clip(t * 0.15, 0, 1)], axis=-1),
-        ),
-        "sat_cyan_ramp": (
-            "高饱和青绿曝光斜坡",
-            np.stack([np.clip(t * 0.15, 0, 1), np.clip(t * 0.95, 0, 1), np.clip(t * 1.10, 0, 1)], axis=-1),
-        ),
-        "sat_magenta_ramp": (
-            "高饱和洋红曝光斜坡",
-            np.stack([np.clip(t * 1.10, 0, 1), np.clip(t * 0.18, 0, 1), np.clip(t * 0.95, 0, 1)], axis=-1),
-        ),
+    # 1) 中性灰轴直接用于图表 1/2 展示与基准斜率计算
+    gray_pts = np.stack([t, t, t], axis=-1)
+    gray_out = eval_trilinear(grid, gray_pts)
+    gray_y = luma_709(gray_out)
+    gray_dy = np.diff(gray_y)
+    gray_slope = gray_dy / dt
+
+    curve_cache: Dict[str, np.ndarray] = {
+        "t": t,
+        "gray_rgb": gray_out,
+        "gray_y": gray_y,
+        "gray_slope": gray_slope,
+        "gray_tet_y": luma_709(eval_tetrahedral(grid, gray_pts)),
+    }
+
+    # 2) 构建物理严谨的场景线性相机曝光扫描 (-7.0 EV 到 +6.5 EV，围绕 18% 灰)
+    evs = np.linspace(-7.0, 6.5, n_samples, dtype=np.float64)
+    ev_scales = 0.18 * (2.0 ** evs)
+    m_to_709 = np.asarray(profile.gamut_to_rec709, dtype=np.float64)
+    m_709_to_cam = np.linalg.inv(m_to_709)
+
+    scene_colors_709: Dict[str, Tuple[str, List[float]]] = {
+        "neutral_gray_ev": ("中性灰曝光斜坡", [1.0, 1.0, 1.0]),
+        "warm_skin_ev": ("暖肤色曝光斜坡", [1.35, 0.92, 0.68]),
+        "deep_skin_ev": ("深肤色曝光斜坡", [1.20, 0.80, 0.55]),
+        "sat_orange_ev": ("高饱和橙曝光斜坡", [1.80, 0.72, 0.16]),
+        "sat_red_ev": ("高饱和纯红曝光斜坡", [1.90, 0.22, 0.16]),
+        "sat_green_ev": ("自然翠绿曝光斜坡", [0.24, 1.55, 0.28]),
+        "sat_cyan_ev": ("高饱和青蓝曝光斜坡", [0.22, 1.05, 1.65]),
+        "sat_magenta_ev": ("高饱和品红曝光斜坡", [1.50, 0.28, 1.35]),
     }
 
     reversal_events: List[Dict[str, Any]] = []
     oscillation_events: List[Dict[str, Any]] = []
     step_events: List[Dict[str, Any]] = []
-    curve_cache: Dict[str, np.ndarray] = {"t": t}
 
-    for key, (label, pts) in ramps.items():
-        # 使用三线性插值模拟机内硬件真实曲线
-        out = eval_trilinear(grid, pts)
+    for key, (label, base_709) in scene_colors_709.items():
+        base_cam = np.maximum(np.asarray(base_709, dtype=np.float64) @ m_709_to_cam.T, 0.002)
+        lin_pts = ev_scales[:, None] * base_cam[None, :]
+        log_pts = profile_lin_to_log(profile, lin_pts)
+
+        # 仅在全部通道尚处于 Log 动态范围有效递增段（未撞上输入边界 0/1 截断）评估单调性
+        active = (np.max(log_pts, axis=-1) < 0.998) & (np.min(log_pts, axis=-1) > 0.002)
+        if np.sum(active) < 32:
+            continue
+
+        pts_act = log_pts[active]
+        t_act = np.mean(pts_act, axis=-1)
+        out = eval_trilinear(grid, pts_act)
         y = luma_709(out)
         dy = np.diff(y)
-        slope = dy / dt
+        dt_act = np.maximum(np.diff(t_act), 1e-4)
+        slope = dy / dt_act
         d2y = np.diff(slope)
 
-        if key == "neutral_gray":
-            curve_cache["gray_rgb"] = out
-            curve_cache["gray_y"] = y
-            curve_cache["gray_slope"] = slope
-            curve_cache["gray_tet_y"] = luma_709(eval_tetrahedral(grid, pts))
-
-        # 1) 亮度单调性反转检测: dY 明显小于 0
+        # 单调性反转检测: 亮度明显反向跌落
         rev_idx = np.where(dy < -0.0012)[0]
         if rev_idx.size > 0:
-            # 将连续区间聚合
             total_drop = float(-np.sum(dy[rev_idx]))
             min_slope = float(np.min(slope[rev_idx]))
-            t_start = float(t[rev_idx[0]])
-            t_end = float(t[rev_idx[-1] + 1])
-            if total_drop > 0.006 or min_slope < -0.6:
+            t_start = float(t_act[rev_idx[0]])
+            t_end = float(t_act[rev_idx[-1] + 1])
+            if total_drop > 0.008 or (total_drop > 0.004 and min_slope < -0.8):
                 reversal_events.append(
                     {
                         "ramp": label,
@@ -831,14 +1204,14 @@ def check_monotonicity_and_zebra(
                     }
                 )
 
-        # 2) 斑马纹振荡波纹检测：兼顾 512 点像素锯齿 与 晶格尺度多峰起伏（局部极值拐点 >= 2 且伴随反相跌落）
+        # 斑马纹振荡波纹检测：兼顾高密度像素锯齿与晶格尺度正负反复波纹
         significant = np.abs(dy) > 0.0018
         flips = (dy[:-1] * dy[1:] < 0) & significant[:-1] & significant[1:]
         flip_count = int(np.sum(flips))
 
-        # 晶格尺度 (降采样到 33 点步长间隔) 检查趋势反转次数，精准捕捉 LUT 晶格级 Zebra 波纹
-        stride = max(1, n_samples // max(grid.shape[0] - 1, 16))
+        stride = max(1, len(y) // max(grid.shape[0] - 1, 16))
         y_coarse = y[::stride]
+        t_coarse = t_act[::stride]
         dy_coarse = np.diff(y_coarse)
         sig_c = np.abs(dy_coarse) > 0.004
         coarse_flips = (dy_coarse[:-1] * dy_coarse[1:] < 0) & sig_c[:-1] & sig_c[1:]
@@ -847,13 +1220,13 @@ def check_monotonicity_and_zebra(
         if flip_count >= 2 or coarse_flip_count >= 2:
             if coarse_flip_count >= 2:
                 idx_c = np.where(coarse_flips)[0]
-                t_c = t[::stride]
-                t0, t1 = float(t_c[idx_c[0]]), float(t_c[idx_c[-1] + 2 if idx_c[-1] + 2 < len(t_c) else -1])
+                t0 = float(t_coarse[idx_c[0]])
+                t1 = float(t_coarse[min(idx_c[-1] + 2, len(t_coarse) - 1)])
                 max_j = float(np.max(np.abs(dy_coarse[idx_c])))
                 total_flips = coarse_flip_count
             else:
                 idx_f = np.where(flips)[0]
-                t0, t1 = float(t[idx_f[0]]), float(t[idx_f[-1] + 1])
+                t0, t1 = float(t_act[idx_f[0]]), float(t_act[idx_f[-1] + 1])
                 max_j = float(np.max(np.abs(dy[idx_f])))
                 total_flips = flip_count
             oscillation_events.append(
@@ -866,27 +1239,26 @@ def check_monotonicity_and_zebra(
                 }
             )
 
-        # 3) 孤立阶跃/二阶导数异常尖峰（未平滑 if-else 或 Zebra/False Color 硬跳变）
-        step_thresh = 0.035
-        big_jumps = np.where(np.abs(dy) > step_thresh)[0]
+        # 孤立硬阶跃断层检测 (单步 ΔY > 0.045)
+        big_jumps = np.where(np.abs(dy) > 0.045)[0]
         if big_jumps.size > 0:
             step_events.append(
                 {
                     "ramp": label,
-                    "t_at": [round(float(t[i]), 3) for i in big_jumps[:4]],
+                    "t_at": [round(float(t_act[i]), 3) for i in big_jumps[:4]],
                     "max_step_dy": round(float(np.max(np.abs(dy[big_jumps]))), 4),
                     "max_d2y": round(float(np.max(np.abs(d2y))) if d2y.size else 0.0, 2),
                 }
             )
 
-    # 3D 晶格原生轴向反转扫描 (直接查每个晶格沿 R/G/B 递增值是否反转)
+    # 3D 晶格原生轴向严重反转扫描（主通道随自身输入增加时出现明显倒跌）
     n = grid.shape[0]
     dr_r = np.diff(grid[:, :, :, 0], axis=0)
     dg_g = np.diff(grid[:, :, :, 1], axis=1)
     db_b = np.diff(grid[:, :, :, 2], axis=2)
-    axial_rev_r = int(np.sum(dr_r < -0.025))
-    axial_rev_g = int(np.sum(dg_g < -0.025))
-    axial_rev_b = int(np.sum(db_b < -0.025))
+    axial_rev_r = int(np.sum(dr_r < -0.04))
+    axial_rev_g = int(np.sum(dg_g < -0.04))
+    axial_rev_b = int(np.sum(db_b < -0.04))
     axial_rev_total = axial_rev_r + axial_rev_g + axial_rev_b
     axial_total_edges = 3 * (n - 1) * n * n
 
@@ -894,11 +1266,11 @@ def check_monotonicity_and_zebra(
         worst = max(reversal_events, key=lambda x: x["total_luma_drop"])
         findings.append(
             {
-                "severity": "CRITICAL" if worst["total_luma_drop"] > 0.015 or len(reversal_events) >= 2 else "WARNING",
+                "severity": "CRITICAL" if worst["total_luma_drop"] > 0.020 or len(reversal_events) >= 2 else "WARNING",
                 "category": "高光/饱和度单调性反转 (Solarization)",
-                "symptom_impact": "【斑马纹/等高线条纹元凶】输入亮度升高时输出亮度突然反向跌落，导致渐变高光或亮色带出现暗色条纹！",
-                "evidence": f"在 {len(reversal_events)} 条测试斜坡发现反转，最严重为 [{worst['ramp']}] 输入区间 {worst['t_range']}（累计亮度倒跌 {worst['total_luma_drop']:.4f}，最低斜率 {worst['min_slope']:.2f}）。",
-                "dctl_advice": "重点排查减法饱和度 (Subtractive Sat) / 密度 / Tetrahedral Warper DCTL！减小其高亮通道权重，或在进入 DCTL 前加 CST 开启 Tone & Gamut Mapping。",
+                "symptom_impact": "【斑马纹/等高线条纹风险】输入曝光升高时输出亮度反向跌落，高光或亮色渐变处易形成反相暗条带。",
+                "evidence": f"在 {len(reversal_events)} 条物理曝光斜坡发现亮度反转，最严重为 [{worst['ramp']}] 输入均值区间 {worst['t_range']}（累计倒跌 {worst['total_luma_drop']:.4f}，最低斜率 {worst['min_slope']:.2f}）。",
+                "technical_note": "常见成因包括过激的通道相减、强行跨色相拉扯或非单调高光曲线，建议排查相应非线性变换模块。",
             }
         )
 
@@ -908,9 +1280,9 @@ def check_monotonicity_and_zebra(
             {
                 "severity": "CRITICAL",
                 "category": "高频锯齿振荡 (Zebra / Banding 波形)",
-                "symptom_impact": "【典型斑马纹】输出曲线发生连续正负反复震荡，上机后会在连续影调中渲染出明暗交替的斑马条纹。",
+                "symptom_impact": "【典型斑马纹波形】输出亮度随曝光递增连续正负往复震荡，机内监看将呈现明暗交替条纹。",
                 "evidence": f"在 [{worst_osc['ramp']}] 区间 {worst_osc['t_range']} 检测到 {worst_osc['flip_count']} 次正负交替锯齿翻转（单步跃迁最大 {worst_osc['max_jump']:.4f}）。",
-                "dctl_advice": "检查是否忘记关闭 DCTL 的 Zebra / False Color / Gamut Warning 开关，或存在硬阈值分支与过激曲线震荡；可尝试 sanitize_lut.py --de-oscillate 做应急阻尼验证。",
+                "technical_note": "请检查导出前是否误开了 DCTL 内置 Zebra/False Color/Warning 指示开关，或存在未用 smoothstep 平滑的硬阈值分段。",
             }
         )
 
@@ -920,9 +1292,9 @@ def check_monotonicity_and_zebra(
             {
                 "severity": "WARNING",
                 "category": "曲线硬阶跃断层 (硬阈值跳变)",
-                "symptom_impact": "画面在特定亮度阈值处突然跳色或裂开明显色阶条带",
+                "symptom_impact": "画面在特定曝光阈值处出现突兀色阶跳变线",
                 "evidence": f"[{worst_step['ramp']}] 在输入 {worst_step['t_at']} 处单步亮度陡跳 ΔY={worst_step['max_step_dy']:.4f}。",
-                "dctl_advice": "排查 DCTL 中未经 smoothstep 平滑的 if-else 亮度分段代码，或存在局部色域硬切开关。",
+                "technical_note": "通常对应代码中未经平滑过渡的 if-else 阈值硬切换分支。",
             }
         )
 
@@ -930,10 +1302,10 @@ def check_monotonicity_and_zebra(
         findings.append(
             {
                 "severity": "WARNING",
-                "category": "3D 晶格局部轴向反转",
-                "symptom_impact": "高饱和彩色过渡区易出现色相/明度反相条纹",
-                "evidence": f"沿 R/G/B 主轴递增时共 {axial_rev_total}/{axial_total_edges} 条晶格边出现明显负增量 (<-0.025)，分布 R:{axial_rev_r}, G:{axial_rev_g}, B:{axial_rev_b}。",
-                "dctl_advice": "减少高饱和通道间的交叉相减力度，避免纯色通道反相跌落。",
+                "category": "3D 晶格局部主轴反转",
+                "symptom_impact": "高饱和纯色通道渐变可能出现局部亮度/色度反相",
+                "evidence": f"沿 R/G/B 主轴递增时共 {axial_rev_total}/{axial_total_edges} 条晶格边出现明显负增量 (<-0.040)，分布 R:{axial_rev_r}, G:{axial_rev_g}, B:{axial_rev_b}。",
+                "technical_note": "若这些点位于极限超色域边缘且实拍未触发曝光反转可结合需求评估，否则需检查高饱和区交叉权重。",
             }
         )
 
@@ -948,56 +1320,102 @@ def check_monotonicity_and_zebra(
             "total": axial_rev_total,
             "ratio_pct": round(axial_rev_total / max(axial_total_edges, 1) * 100.0, 3),
         },
-        "gray_max_slope": round(float(np.max(curve_cache["gray_slope"])), 3),
-        "gray_min_slope": round(float(np.min(curve_cache["gray_slope"])), 3),
+        "gray_max_slope": round(float(np.max(gray_slope)), 3),
+        "gray_min_slope": round(float(np.min(gray_slope)), 3),
     }
     return metrics, findings, curve_cache
 
 
-def check_jacobian_folding(grid: np.ndarray) -> Tuple[Dict[str, Any], List[Dict[str, Any]], np.ndarray]:
-    """第 3 项检查：3D 晶格雅可比行列式 det(J) 检测空间自相交与色彩折叠。"""
+def check_jacobian_folding(
+    grid: np.ndarray, profile: CameraProfile
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]], np.ndarray]:
+    """
+    第 3 项检查：3D 晶格雅可比行列式 det(J) 检测空间自相交与色彩折叠。
+    区分“核心物理有效色域内部折叠”与“超色域外壁压缩（det→0 离散表面效应）”。
+    """
     findings: List[Dict[str, Any]] = []
     n = grid.shape[0]
     h = 1.0 / (n - 1)
 
-    # 体素前向有限差分 J 矩阵 [r, g, b, out_ch, in_axis]
     dr = grid[1:, :-1, :-1, :] - grid[:-1, :-1, :-1, :]
     dg = grid[:-1, 1:, :-1, :] - grid[:-1, :-1, :-1, :]
     db = grid[:-1, :-1, 1:, :] - grid[:-1, :-1, :-1, :]
 
-    # 解析计算 3x3 行列式 det([dr, dg, db]) 并按步长立方归一化
     cross_gb = np.cross(dg, db, axis=-1)
     det_raw = np.sum(dr * cross_gb, axis=-1)
     det_norm = det_raw / (h ** 3)
 
-    # 容忍极微小数值误差，真正负数代表空间折叠翻转
-    folded_mask = det_norm < -0.02
-    folded_count = int(np.sum(folded_mask))
+    # 判断每个体素中心是否在核心物理有效色域内
+    centers = (np.arange(n - 1, dtype=np.float64) + 0.5) / (n - 1)
+    rr, gg, bb = np.meshgrid(centers, centers, centers, indexing="ij")
+    in_pts = np.stack([rr, gg, bb], axis=-1)
+    m_to_709 = np.asarray(profile.gamut_to_rec709, dtype=np.float64)
+    lin_cam = profile_log_to_lin(profile, in_pts)
+    lin_709 = lin_cam @ m_to_709.T
+
+    core_mask = (
+        np.all(lin_cam >= -0.001, axis=-1)
+        & np.all(lin_709 >= -0.03, axis=-1)
+        & np.all(lin_709 <= 1.25, axis=-1)
+    )
+
+    folded_all = det_norm < -0.03
+    core_folded_mask = folded_all & core_mask
+    boundary_folded_mask = folded_all & (~core_mask)
+
+    core_folded_count = int(np.sum(core_folded_mask))
+    boundary_folded_count = int(np.sum(boundary_folded_mask))
+    total_folded_count = int(np.sum(folded_all))
     total_voxels = int(det_norm.size)
     min_det = float(np.min(det_norm))
+    min_core_det = float(np.min(det_norm[core_mask])) if np.any(core_mask) else 0.0
     max_det = float(np.max(det_norm))
 
     worst_coord: Optional[List[float]] = None
-    if folded_count > 0:
+    if total_folded_count > 0:
         idx = np.unravel_index(int(np.argmin(det_norm)), det_norm.shape)
         worst_coord = [round(float(c) / (n - 1), 4) for c in idx]
+
+    core_worst_coord: Optional[List[float]] = None
+    if core_folded_count > 0:
+        masked_det = np.where(core_mask, det_norm, 1e9)
+        c_idx = np.unravel_index(int(np.argmin(masked_det)), det_norm.shape)
+        core_worst_coord = [round(float(c) / (n - 1), 4) for c in c_idx]
+
+    # 仅在有效色域核心区发生真折叠，或全空间出现剧烈撕裂翻转时才报警扣分
+    if core_folded_count > 0:
+        core_pct = core_folded_count / max(int(np.sum(core_mask)), 1) * 100.0
         findings.append(
             {
-                "severity": "CRITICAL" if folded_count / total_voxels > 0.005 or min_det < -0.5 else "WARNING",
-                "category": "3D 色彩空间折叠 (Jacobian det(J) < 0)",
-                "symptom_impact": "【斑马纹/撕裂条纹元凶】LUT 立方体体素发生三维翻转穿插，插值路径在体素内混乱折返，产生网状/条纹裂变！",
-                "evidence": f"共 {folded_count}/{total_voxels} 个体素 ({folded_count/total_voxels*100:.3f}%) 发生空间折叠，最小归一化 det(J)={min_det:.4f}，最严重坐标≈{worst_coord}。",
-                "dctl_advice": "排查高曲率 Hue-vs-Hue / Tetrahedral Color Warper / 极度色相挤压 DCTL，减小色相交界处的扭曲幅度。",
+                "severity": "CRITICAL" if core_pct > 0.25 or min_core_det < -0.5 else "WARNING",
+                "category": "核心有效色域内部三维折叠 (Jacobian det(J) < 0)",
+                "symptom_impact": "【斑马纹/色彩撕裂风险】有效拍摄色彩区体素发生三维穿插翻转，插值时易出现网格状或条带状色彩错位。",
+                "evidence": f"核心有效区共 {core_folded_count} 个体素 ({core_pct:.3f}%) 发生空间折叠，最小 det(J)={min_core_det:.4f}，最严重坐标≈{core_worst_coord}。",
+                "technical_note": "请检查高曲率色相局部扭曲或节点色彩空间变换是否存在自相交折叠。",
+            }
+        )
+    elif min_det < -15.0 or (total_folded_count / max(total_voxels, 1) > 0.025):
+        findings.append(
+            {
+                "severity": "CRITICAL" if min_det < -50.0 or total_folded_count / total_voxels > 0.05 else "WARNING",
+                "category": "边界区域剧烈空间折叠 (Severe Boundary Folding)",
+                "symptom_impact": "高饱和或极暗边界存在剧烈三维反转，极端光比色彩过渡易出现撕裂条纹。",
+                "evidence": f"全立方体共 {total_folded_count}/{total_voxels} 个体素 ({total_folded_count/total_voxels*100:.2f}%) 折叠，最小 det(J)={min_det:.4f}，最严重坐标≈{worst_coord}。",
+                "technical_note": "边界压缩壁出现超强负雅可比行列式，通常由极暗部除零爆炸或过激色相/密度挤压导致。",
             }
         )
 
     metrics = {
-        "folded_voxels": folded_count,
+        "folded_voxels": total_folded_count,
+        "core_folded_voxels": core_folded_count,
+        "boundary_folded_voxels": boundary_folded_count,
         "total_voxels": total_voxels,
-        "folded_pct": round(folded_count / max(total_voxels, 1) * 100.0, 4),
+        "folded_pct": round(total_folded_count / max(total_voxels, 1) * 100.0, 4),
         "min_normalized_det_j": round(min_det, 4),
+        "min_core_normalized_det_j": round(min_core_det, 4),
         "max_normalized_det_j": round(max_det, 4),
         "worst_folded_coord": worst_coord,
+        "core_worst_folded_coord": core_worst_coord,
     }
     return metrics, findings, det_norm
 
@@ -1151,7 +1569,7 @@ def check_extreme_shadows(
                     f"最大近轴色度增益={max_chroma_gain:.2f}x（输出色差达 {max_near_axis_chroma:.3f}，坐标 {worst_chroma_coord} -> 输出 {worst_chroma_out}）；"
                     f"黑位底噪仿真显示色度噪点相对标准曲线放大 {chroma_noise_amp_vs_ref:.2f} 倍！"
                 ),
-                "dctl_advice": "典型成因是 DCTL 在暗部计算饱和度/球面坐标时分母接近 0（如 1/(L+1e-4)）。请在 DCTL 内对暗部分母加安全下限（或 smoothstep 渐弱暗部饱和度），并在 Resolve 暗部做 Shadow Desat；应急上机可用 sanitize_lut.py --tame-shadow-chroma。",
+                "technical_note": "典型成因是 DCTL 在暗部计算饱和度/球面坐标时分母接近 0（如 1/(L+1e-4)）。请在 DCTL 内对暗部分母加安全下限（或 smoothstep 渐弱暗部饱和度），并在 Resolve 暗部做 Shadow Desat；应急上机可用 sanitize_lut.py --tame-shadow-chroma。",
             }
         )
 
@@ -1162,7 +1580,7 @@ def check_extreme_shadows(
                 "category": "极暗部亮度增益斜率尖峰 (Shadow Slope Spike)",
                 "symptom_impact": "【极暗部颗粒粗噪点元凶】黑电平附近的微弱传感底噪被陡峭斜率等比例放大，产生明显暗部亮度颗粒感。",
                 "evidence": f"极暗部 (0.0~{shadow_hi:.2f}) 最大亮度斜率={max_shadow_luma_slope:.2f} (在输入 {max_slope_t:.3f} 处)，单通道最大斜率={max_shadow_ch_slope:.2f}，黑位亮度底噪相对标准曲线放大 {luma_noise_amp_vs_ref:.2f} 倍。",
-                "dctl_advice": "检查是否重复叠加了两次 S-Log3->709 转换或暗部 Contrast/Pivot 过激；建议放松阴影 Toe 对比度并核对 S-Log3 黑位 (95/1023) 对应斜率。",
+                "technical_note": "检查是否重复叠加了两次 S-Log3->709 转换或暗部 Contrast/Pivot 过激；建议放松阴影 Toe 对比度并核对 S-Log3 黑位 (95/1023) 对应斜率。",
             }
         )
 
@@ -1173,7 +1591,7 @@ def check_extreme_shadows(
                 "category": "极暗部中性灰偏色 (Shadow Gray Tint)",
                 "symptom_impact": "纯黑与暗灰背景出现明显偏色或底噪染色",
                 "evidence": f"中性灰轴在极暗部输入 {max_axis_chroma_t:.3f} 处最大通道偏离={max_axis_chroma:.4f}。",
-                "dctl_advice": "核查 DCTL 暗部 Split-Tone 或 Lift 色轮偏移是否过重。",
+                "technical_note": "核查 DCTL 暗部 Split-Tone 或 Lift 色轮偏移是否过重。",
             }
         )
 
@@ -1184,7 +1602,7 @@ def check_extreme_shadows(
                 "category": "黑点原点 (0,0,0) 邻域突变",
                 "symptom_impact": "最深黑位与相邻晶格跳变过大，触发机内死黑噪点断层",
                 "evidence": f"(0,0,0) 至一阶邻格最大欧氏跳变 ΔRGB={zero_step_jump:.4f}。",
-                "dctl_advice": "检查 DCTL 在 RGB=0 处是否存在分母除零或分支跳变。",
+                "technical_note": "检查 DCTL 在 RGB=0 处是否存在分母除零或分支跳变。",
             }
         )
 
@@ -1227,9 +1645,9 @@ def check_extreme_shadows(
 
 
 def check_interpolation_divergence(
-    grid: np.ndarray,
+    grid: np.ndarray, profile: CameraProfile
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]], np.ndarray]:
-    """第 5 项检查：达芬奇 Tetrahedral 四面体 vs 摄影机 Trilinear 三线性插值分歧。"""
+    """第 5 项检查：达芬奇 Tetrahedral 四面体 vs 摄影机 Trilinear 三线性插值分歧（过滤非物理超黑死角）。"""
     findings: List[Dict[str, Any]] = []
     n = grid.shape[0]
     centers = (np.arange(n - 1, dtype=np.float64) + 0.5) / (n - 1)
@@ -1240,26 +1658,41 @@ def check_interpolation_divergence(
     out_tet = eval_tetrahedral(grid, pts)
     diff = np.linalg.norm(out_tet - out_tri, axis=-1)
 
+    m_to_709 = np.asarray(profile.gamut_to_rec709, dtype=np.float64)
+    lin_cam = profile_log_to_lin(profile, pts)
+    lin_709 = lin_cam @ m_to_709.T
+    phys_mask = np.all(lin_cam >= -0.002, axis=-1) & np.all(lin_709 >= -0.35, axis=-1)
+
     max_diff = float(np.max(diff))
     p99_diff = float(np.percentile(diff, 99))
     mean_diff = float(np.mean(diff))
+    phys_diff = diff[phys_mask] if np.any(phys_mask) else diff.ravel()
+    phys_max_diff = float(np.max(phys_diff))
+    phys_p99_diff = float(np.percentile(phys_diff, 99))
+
     worst_idx = np.unravel_index(int(np.argmax(diff)), diff.shape)
     worst_coord = [round(float(centers[c]), 4) for c in worst_idx]
 
-    if max_diff > 0.045 or p99_diff > 0.015:
+    masked_phys_diff = np.where(phys_mask, diff, -1.0)
+    phys_worst_idx = np.unravel_index(int(np.argmax(masked_phys_diff)), diff.shape)
+    phys_worst_coord = [round(float(centers[c]), 4) for c in phys_worst_idx]
+
+    if phys_max_diff > 0.065 or phys_p99_diff > 0.025 or max_diff > 0.14:
         findings.append(
             {
-                "severity": "WARNING" if max_diff < 0.09 else "CRITICAL",
-                "category": "四面体 vs 三线性插值严重分歧",
-                "symptom_impact": "【所见非所得条纹】在 Resolve 默认四面体插值下看似正常，导入三线性插值的机内监看后却裂开色阶或条带！",
-                "evidence": f"体素中心最大差异 ΔRGB={max_diff:.4f} (位于 {worst_coord})，P99 差异={p99_diff:.4f}。",
-                "dctl_advice": "在 DaVinci Resolve 的 Project Settings 中将 '3D Lookup Table Interpolation' 临时切为 Trilinear 即可在监看器上复现该差异，适当缓和该色彩区域的局部急转斜率。",
+                "severity": "WARNING" if max(phys_max_diff, max_diff * 0.5) < 0.11 else "CRITICAL",
+                "category": "四面体 vs 三线性插值显著分歧",
+                "symptom_impact": "【插值引擎差异风险】Resolve 四面体插值与机内三线性插值存在较大偏差，局部色区上机后可能出现阶梯纹理。",
+                "evidence": f"物理有效色域最大差异 ΔRGB={phys_max_diff:.4f} (位于 {phys_worst_coord})，P99={phys_p99_diff:.4f}；全立方体最大={max_diff:.4f} (位于 {worst_coord})。",
+                "technical_note": "在 DaVinci Resolve 的 Project Settings 中将 '3D Lookup Table Interpolation' 临时切为 Trilinear 即可在监看端复现该差异。",
             }
         )
 
-    # 沿中性灰和纯红测试一条插值差异曲线供图表绘制
-    t = np.linspace(0.0, 1.0, 256)
-    ramp_pts = np.stack([t, np.clip(0.55 * t, 0, 1), np.clip(0.25 * t, 0, 1)], axis=-1)
+    # 沿真实暖肤曝光路径对比插值差异曲线供图表 6 绘制
+    evs = np.linspace(-6.0, 5.5, 256, dtype=np.float64)
+    m_709_to_cam = np.linalg.inv(m_to_709)
+    skin_cam = np.maximum(np.array([1.35, 0.92, 0.68]) @ m_709_to_cam.T, 0.002)
+    ramp_pts = profile_lin_to_log(profile, (0.18 * (2.0 ** evs))[:, None] * skin_cam[None, :])
     ramp_diff = np.linalg.norm(
         eval_tetrahedral(grid, ramp_pts) - eval_trilinear(grid, ramp_pts), axis=-1
     )
@@ -1268,15 +1701,18 @@ def check_interpolation_divergence(
         "max_divergence_delta_rgb": round(max_diff, 5),
         "p99_divergence_delta_rgb": round(p99_diff, 5),
         "mean_divergence_delta_rgb": round(mean_diff, 5),
+        "phys_max_divergence_delta_rgb": round(phys_max_diff, 5),
+        "phys_p99_divergence_delta_rgb": round(phys_p99_diff, 5),
         "worst_coord": worst_coord,
+        "phys_worst_coord": phys_worst_coord,
     }
     return metrics, findings, ramp_diff
 
 
 def check_discontinuities_and_clipping(
-    grid: np.ndarray,
+    grid: np.ndarray, profile: CameraProfile
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
-    """第 6 项检查：邻格跃迁断层与高光硬削波偏色。"""
+    """第 6 项检查：邻格跃迁断层与高光输出上限统计。"""
     findings: List[Dict[str, Any]] = []
     n = grid.shape[0]
     dr = np.linalg.norm(grid[1:, :, :] - grid[:-1, :, :], axis=-1)
@@ -1285,7 +1721,6 @@ def check_discontinuities_and_clipping(
     max_jump = float(max(np.max(dr), np.max(dg), np.max(db)))
     p999_jump = float(np.percentile(np.concatenate([dr.ravel(), dg.ravel(), db.ravel()]), 99.9))
 
-    # 寻找最大跳变所在边
     if np.max(dr) >= np.max(dg) and np.max(dr) >= np.max(db):
         idx = np.unravel_index(int(np.argmax(dr)), dr.shape)
         jump_coord = [round(float(c) / (n - 1), 4) for c in idx]
@@ -1299,18 +1734,14 @@ def check_discontinuities_and_clipping(
         jump_coord = [round(float(c) / (n - 1), 4) for c in idx]
         jump_axis = "B"
 
-    # 高光硬削波检测（单通道提前顶到 >=0.999 而其他通道继续上升导致偏色）
-    high_slice = grid[int(n * 0.65) :, int(n * 0.65) :, int(n * 0.65) :]
-    clipped_ratio = float(np.mean(np.any(high_slice >= 0.999, axis=-1)))
-
-    if max_jump > 0.36:
+    if max_jump > 0.45:
         findings.append(
             {
-                "severity": "WARNING" if max_jump < 0.50 else "CRITICAL",
+                "severity": "WARNING" if max_jump < 0.60 else "CRITICAL",
                 "category": "晶格邻域剧烈断层 (Grid Discontinuity)",
                 "symptom_impact": "图像在该颜色附近产生像素撕裂、噪点块或突兀色阶线",
                 "evidence": f"沿 {jump_axis} 轴在输入 {jump_coord} 附近单格跳变 ΔRGB={max_jump:.4f} (P99.9={p999_jump:.4f})。",
-                "dctl_advice": "检查是否因 DCTL 分支突变、除零或之前存在 NaN 修补留下的硬台阶。",
+                "technical_note": "请排查是否因代码硬阈值分支、除零跳变或坏点修补残留的硬台阶所致。",
             }
         )
 
@@ -1319,7 +1750,6 @@ def check_discontinuities_and_clipping(
         "p999_adjacent_delta_rgb": round(p999_jump, 4),
         "worst_jump_axis": jump_axis,
         "worst_jump_coord": jump_coord,
-        "highlight_clipped_cube_ratio_pct": round(clipped_ratio * 100.0, 2),
     }
     return metrics, findings
 
@@ -1351,22 +1781,23 @@ def summarize_and_score(all_findings: List[Dict[str, Any]]) -> Tuple[int, str]:
 
 def _build_stress_test_image(profile: CameraProfile) -> Tuple[np.ndarray, Dict[str, slice]]:
     """
-    构建专业“合成全动态范围压力测试图”(360x720 RGB, 0~1)，覆盖四大高危区间：
-      1) S-Log3 黑电平附近极暗部带微弱传感器底噪阶梯条 (诱发极暗部噪点/彩噪)
+    构建物理真实的“合成全动态范围压力测试图”(360x720 RGB, 0~1)，覆盖四大测试区：
+      1) 黑电平附近极暗部带微弱传感器底噪阶梯条 (诱发极暗部噪点/彩噪)
       2) 全范围平滑中性灰梯度 (检测反转/单调性/偏色)
-      3) 高光暖肤色渐变带 (检测高光斑马纹/Solarization)
-      4) 全色相高饱和渐变矩阵 (检测色域折叠/斑马纹/插值裂变)
+      3) 场景线性暖肤色曝光梯度 (通过真实色彩矩阵编码，涵括 -6 到 +5.5 EV)
+      4) 全色相 × 饱和度 × 曝光 2D 物理测试场 (检测高饱和反转/斑马纹/插值裂变)
     """
     h, w = 360, 720
     img = np.zeros((h, w, 3), dtype=np.float64)
     x = np.linspace(0.0, 1.0, w, dtype=np.float64)
+    m_to_709 = np.asarray(profile.gamut_to_rec709, dtype=np.float64)
+    m_709_to_cam = np.linalg.inv(m_to_709)
 
-    # 条带 A (0..90): 极暗部 S-Log3 黑位周围 [0.04, 0.22] 水平渐变 + 真实微弱传感器底噪
+    # 条带 A (0..90): 极暗部黑位周围 [0.04, 0.22] 水平渐变 + 真实微弱传感器底噪
     rng = np.random.default_rng(1024)
     s_a = slice(0, 90)
     ramp_dark = profile.sub_black_zone[0] + 0.04 + x * 0.18
     dark_base = np.broadcast_to(ramp_dark[None, :, None], (90, w, 3)).copy()
-    # 上半段带微弱底噪 (sigma=0.004)，下半段纯净暗阶渐变便于对比
     dark_base[:55] += rng.normal(0.0, 0.004, size=(55, w, 3))
     img[s_a] = np.clip(dark_base, 0.0, 1.0)
 
@@ -1374,26 +1805,23 @@ def _build_stress_test_image(profile: CameraProfile) -> Tuple[np.ndarray, Dict[s
     s_b = slice(90, 150)
     img[s_b] = np.broadcast_to(x[None, :, None], (60, w, 3))
 
-    # 条带 C (150..220): 高光暖肤色梯度（涵盖阴影至过曝）
+    # 条带 C (150..220): 物理真实暖肤色曝光梯度 (-5.5 EV 到 +5.5 EV)
     s_c = slice(150, 220)
-    skin_base = np.stack(
-        [
-            np.clip(0.10 + x * 0.95, 0, 1),
-            np.clip(0.09 + x * 0.74, 0, 1),
-            np.clip(0.08 + x * 0.56, 0, 1),
-        ],
-        axis=-1,
-    )
-    img[s_c] = np.broadcast_to(skin_base[None, :, :], (70, w, 3))
+    evs_c = np.linspace(-5.5, 5.5, w, dtype=np.float64)
+    skin_cam = np.maximum(np.array([1.35, 0.92, 0.68]) @ m_709_to_cam.T, 0.002)
+    skin_lin = (0.18 * (2.0 ** evs_c))[:, None] * skin_cam[None, :]
+    skin_log = profile_lin_to_log(profile, skin_lin)
+    img[s_c] = np.broadcast_to(skin_log[None, :, :], (70, w, 3))
 
-    # 条带 D (220..360): 全色相 × 亮度 2D 高饱和渐变场 (y 从亮高饱和到暗高饱和)
+    # 条带 D (220..360): 物理全色相 × 曝光亮度 2D 渐变场 (HSV 先转 Rec.709 线性，再映射进相机原生色域并编码为 Log)
     s_d = slice(220, 360)
     hue = x[None, :] * 6.0  # 0..6
-    val = np.linspace(0.95, 0.25, 140)[:, None]
-    sat = np.linspace(0.95, 0.45, 140)[:, None]
-    c_val = val * sat
+    evs_d = np.linspace(3.5, -2.5, 140)[:, None]
+    val_lin = 0.18 * (2.0 ** evs_d)
+    sat = np.linspace(0.88, 0.45, 140)[:, None]
+    c_val = val_lin * sat
     x_val = c_val * (1.0 - np.abs((hue % 2.0) - 1.0))
-    m_val = val - c_val
+    m_val = val_lin - c_val
     hi = np.floor(hue).astype(np.int64) % 6
     r = np.zeros_like(hue)
     g = np.zeros_like(hue)
@@ -1412,7 +1840,9 @@ def _build_stress_test_image(profile: CameraProfile) -> Tuple[np.ndarray, Dict[s
         r = np.where(mask, rk, r)
         g = np.where(mask, gk, g)
         b = np.where(mask, bk, b)
-    img[s_d] = np.clip(np.stack([r + m_val, g + m_val, b + m_val], axis=-1), 0.0, 1.0)
+    rgb709_lin = np.stack([r + m_val, g + m_val, b + m_val], axis=-1)
+    cam_lin = np.maximum(rgb709_lin @ m_709_to_cam.T, 0.001)
+    img[s_d] = profile_lin_to_log(profile, cam_lin)
 
     zones = {"shadow": s_a, "gray": s_b, "skin": s_c, "chroma": s_d}
     return img, zones
@@ -1554,8 +1984,21 @@ def generate_visual_reports(
 
     over_vox = np.any(raw_eval > 1.0 + 1e-5, axis=-1)
     under_vox = np.any(raw_eval < -1e-5, axis=-1)
-    fold_vox = np.zeros_like(over_vox, dtype=bool)
-    fold_vox[:-1, :-1, :-1] = det_norm < -0.02
+    # 区分核心区折叠与边界折叠
+    centers_5 = (np.arange(n - 1, dtype=np.float64) + 0.5) / (n - 1)
+    rc5, gc5, bc5 = np.meshgrid(centers_5, centers_5, centers_5, indexing="ij")
+    in_c5 = np.stack([rc5, gc5, bc5], axis=-1)
+    lin_cam5 = profile_log_to_lin(profile, in_c5)
+    lin_709_5 = lin_cam5 @ np.asarray(profile.gamut_to_rec709, dtype=np.float64).T
+    core_m5 = (
+        np.all(lin_cam5 >= -0.001, axis=-1)
+        & np.all(lin_709_5 >= -0.03, axis=-1)
+        & np.all(lin_709_5 <= 1.25, axis=-1)
+    )
+    fold_core_vox = np.zeros_like(over_vox, dtype=bool)
+    fold_core_vox[:-1, :-1, :-1] = (det_norm < -0.03) & core_m5
+    fold_bnd_vox = np.zeros_like(over_vox, dtype=bool)
+    fold_bnd_vox[:-1, :-1, :-1] = (det_norm < -0.03) & (~core_m5)
 
     # 背景采样散点
     ax5.scatter(mean_g[::2, ::2, ::2].ravel(), sat_g[::2, ::2, ::2].ravel(), color="#334155", s=4, alpha=0.35, label="正常晶格采样")
@@ -1563,8 +2006,10 @@ def generate_visual_reports(
         ax5.scatter(mean_g[over_vox], sat_g[over_vox], color="#fbbf24", s=16, alpha=0.85, label=f"超白 >1.0 ({int(np.sum(over_vox))}点)")
     if np.any(under_vox):
         ax5.scatter(mean_g[under_vox], sat_g[under_vox], color="#38bdf8", s=16, alpha=0.85, label=f"负值 <0.0 ({int(np.sum(under_vox))}点)")
-    if np.any(fold_vox):
-        ax5.scatter(mean_g[fold_vox], sat_g[fold_vox], color="#ec4899", s=20, alpha=0.9, marker="x", label=f"雅可比折叠 ({int(np.sum(fold_vox))}格)")
+    if np.any(fold_bnd_vox):
+        ax5.scatter(mean_g[fold_bnd_vox], sat_g[fold_bnd_vox], color="#94a3b8", s=10, alpha=0.55, marker=".", label=f"边界压缩微负 ({int(np.sum(fold_bnd_vox))}格)")
+    if np.any(fold_core_vox):
+        ax5.scatter(mean_g[fold_core_vox], sat_g[fold_core_vox], color="#ec4899", s=22, alpha=0.92, marker="x", label=f"核心折叠 ({int(np.sum(fold_core_vox))}格)")
     ax5.axvline(profile.black_point, color="#a855f7", lw=1.0, ls="--", alpha=0.7)
     ax5.legend(loc="upper right", fontsize=7.5, facecolor="#0f172a", edgecolor="#334155", labelcolor="#e2e8f0")
 
@@ -1578,12 +2023,20 @@ def generate_visual_reports(
     hw_m = report["metrics"]["hardware_and_range"]
     shad_m = report["metrics"]["extreme_shadows"]
     mono_m = report["metrics"]["monotonicity_and_zebra"]
+    roll_m = report["metrics"]["highlight_rolloff"]
+    roll_short = {
+        "SMOOTH_ROLLOFF": "平滑肩部滚降",
+        "GENTLE_ROLLOFF_TO_CLIP": "渐进收敛触顶",
+        "HARD_CLIP_NO_ROLLOFF": "硬削波无滚降",
+        "NON_MONOTONIC_HIGHLIGHT": "高光反转异常",
+    }.get(roll_m["rolloff_status"], roll_m["rolloff_status"])
     summary_text = (
         f"综合评级: {status} ({score}/100)\n"
         f"尺寸: {hw_m['lut_3d_size'] or '1D'}  |  值域: [{hw_m['min_value']:.3f}, {hw_m['max_value']:.3f}]\n"
+        f"高光滚降: {roll_short} (峰值 {roll_m['peak_white_out_y']:.3f})\n"
         f"反转事件: {len(mono_m['reversal_events'])}  |  振荡波纹: {len(mono_m['oscillation_events'])}\n"
         f"暗部斜率: {shad_m['max_shadow_luma_slope']:.2f}  |  近轴色度增益: {shad_m['max_shadow_chroma_gain']:.2f}x\n"
-        f"插值最大分歧: {interp_m['max_divergence_delta_rgb']:.4f}"
+        f"物理有效域最大插值分歧: {interp_m['phys_max_divergence_delta_rgb']:.4f}"
     )
     ax6.text(
         0.96,
@@ -1608,14 +2061,29 @@ def generate_visual_reports(
     hw_wrap_sim = np.mod(raw_out, 1.0)
     has_oob = np.any((raw_out < -1e-4) | (raw_out > 1.0 + 1e-4), axis=-1)
 
-    # 检测图像行方向上的局部伪影像素（排除第 1 条带上半部人工注入随机热噪的 55 行，避免随机噪声误触发水平斑马纹标签）
+    # 检测局部伪影像素：
+    # - 条带 A 下半段 / B / C 沿横向为曝光递增，检查横向反转/锯齿
+    # - 条带 D (220..360) 横向为色相变化，纵向向上才是曝光递增，检查纵向反转/锯齿
     y_img = luma_709(np.clip(raw_out, 0.0, 1.0))
-    dy_x = np.diff(y_img, axis=1, prepend=y_img[:, :1])
-    rev_pix = dy_x < -0.0025
-    osc_pix = np.zeros_like(rev_pix)
-    osc_pix[:, 1:-1] = (dy_x[:, 1:-1] * dy_x[:, 2:] < 0) & (np.abs(dy_x[:, 1:-1]) > 0.003) & (np.abs(dy_x[:, 2:]) > 0.003)
-    rev_pix[:55, :] = False
-    osc_pix[:55, :] = False
+    rev_pix = np.zeros_like(y_img, dtype=bool)
+    osc_pix = np.zeros_like(y_img, dtype=bool)
+
+    dy_x = np.diff(y_img[:220], axis=1, prepend=y_img[:220, :1])
+    rev_pix[55:220] = dy_x[55:220] < -0.0025
+    osc_pix[55:220, 1:-1] = (
+        (dy_x[55:220, 1:-1] * dy_x[55:220, 2:] < 0)
+        & (np.abs(dy_x[55:220, 1:-1]) > 0.003)
+        & (np.abs(dy_x[55:220, 2:]) > 0.003)
+    )
+
+    # 条带 D 纵向向上是曝光增加 (evs_d 从顶部 +3.5 降到底部 -2.5)
+    dy_up = y_img[220:359] - y_img[221:360]
+    rev_pix[220:359] = dy_up < -0.0035
+    osc_pix[221:359] = (
+        (dy_up[:-1] * dy_up[1:] < 0)
+        & (np.abs(dy_up[:-1]) > 0.004)
+        & (np.abs(dy_up[1:]) > 0.004)
+    )
 
     # 暗部彩噪像素：原输入在暗部区间且极低饱和度，输出却出现明显色差
     in_is_dark_neutral = (np.mean(test_img, axis=-1) <= profile.shadow_zone[1] + 0.02) & (chroma_spread(test_img) < 0.03)
@@ -1688,9 +2156,10 @@ def generate_visual_reports(
 
 
 def render_markdown_report(report: Dict[str, Any], diag_png: Optional[Path], stress_png: Optional[Path]) -> str:
-    """生成结构清晰、中文专业详尽的 Markdown 诊断报告。"""
+    """生成结构清晰、客观中立的中文技术质检 Markdown 报告（不包含主观审美调色说教）。"""
     s = report["summary"]
     hw = report["metrics"]["hardware_and_range"]
+    roll = report["metrics"]["highlight_rolloff"]
     mono = report["metrics"]["monotonicity_and_zebra"]
     jac = report["metrics"]["jacobian_folding"]
     shad = report["metrics"]["extreme_shadows"]
@@ -1699,7 +2168,7 @@ def render_markdown_report(report: Dict[str, Any], diag_png: Optional[Path], str
     sim = shad["monte_carlo_noise_sim"]
 
     lines = [
-        f"# LUT 专业科学质检报告：`{Path(report['file']).name}`",
+        f"# LUT 专业工程质检报告：`{Path(report['file']).name}`",
         "",
         f"- **综合评级**：`{s['status']}`（健康得分：**{s['score']} / 100**）",
         f"- **目标机内环境**：`{report['target']}` | **Log 曲线预设**：`{report['profile_name']}`",
@@ -1707,12 +2176,12 @@ def render_markdown_report(report: Dict[str, Any], diag_png: Optional[Path], str
         "",
         "---",
         "",
-        "## 一、核心痛点诊断发现（按严重程度排序）",
+        "## 一、工程质检发现（仅报告数学与硬件异常）",
         "",
     ]
 
     if not report["findings"]:
-        lines.append("> 未检出影响 Sony 机内监看或暗部画质的异常缺陷，曲线连续、平滑且严格处于 `[0.0, 1.0]` 安全范围。")
+        lines.append("> 未检出影响机内监看安全、曲线单调性或极暗部信噪比的数学与格式缺陷。该 LUT 值域合规且曲线平滑。")
     else:
         for idx, f in enumerate(report["findings"], 1):
             badge = "🔴 严重" if f["severity"] == "CRITICAL" else ("🟠 警告" if f["severity"] == "WARNING" else "🔵 提示")
@@ -1721,7 +2190,7 @@ def render_markdown_report(report: Dict[str, Any], diag_png: Optional[Path], str
                     f"### {idx}. {badge} {f['category']}",
                     f"- **上机直接表现**：{f['symptom_impact']}",
                     f"- **定量检测证据**：{f['evidence']}",
-                    f"- **达芬奇 / DCTL 修复建议**：{f['dctl_advice']}",
+                    f"- **技术成因说明**：{f.get('technical_note', f.get('dctl_advice', ''))}",
                     "",
                 ]
             )
@@ -1730,19 +2199,29 @@ def render_markdown_report(report: Dict[str, Any], diag_png: Optional[Path], str
         [
             "---",
             "",
-            "## 二、关键数学质检指标一览",
+            "## 二、高光滚降与影调锚点特征（客观实测表征）",
             "",
-            "| 检查维度 | 关键指标 | 实测值 | 安全参考基准 |",
+            f"- **高光滚降定性**：`{roll['rolloff_status']}` — {roll['rolloff_description']}",
+            f"- **关键输入锚点输出亮度 $Y$**：0% 黑位 `{roll['black_point_out_y']}` | 18% 灰 `{roll['mid_gray_out_y']}` | 90% 白 `{roll['white_90_out_y']}` | 顶点 `(1,1,1)` `{roll['peak_white_out_y']}`（*注：中灰偏亮/偏暗及白点峰值属于调色师 Look 风格选择，不作为缺陷扣分*）",
+            f"- **高光斜率衰减**：中灰斜率 `{roll['slope_mid_gray']}` → 90% 白 `{roll['slope_white_90']}` → 末端高光 `[0.88, 1.0]` 平均斜率 `{roll['slope_shoulder_end']}`（衰减比 `{roll['shoulder_decay_ratio']}`）",
+            f"- **死白硬削波 vs 色域压缩区分**：三通道全白平顶削波占比 `{roll['achromatic_white_clip_pct']}%`；宽色域外壁投影占比 `{roll['gamut_wall_projection_pct']}%`（*单通道触及 1.0 但位于目标 Rec.709 广色域外部，属于正常的色域投影映射，并非高光无滚降*）",
+            "",
+            "---",
+            "",
+            "## 三、全维度数学质检指标一览",
+            "",
+            "| 检查维度 | 关键指标 | 实测值 | 工程安全基准 |",
             "| :--- | :--- | :--- | :--- |",
             f"| **值域安全** | 最小值 / 最大值 | `{hw['min_value']} ~ {hw['max_value']}` | 严格 `[0.0, 1.0]` |",
             f"| **越界比例** | `< 0.0` 比例 / `> 1.0` 比例 | `{hw['below_zero_pct']}%` / `{hw['above_one_pct']}%` | `0.0%` / `0.0%` |",
-            f"| **斑马纹风险** | 单调反转斜坡数 / 振荡斜坡数 | `{len(mono['reversal_events'])}` / `{len(mono['oscillation_events'])}` | `0` / `0` |",
-            f"| **三维折叠** | 雅可比 `det(J)<0` 体素比例 | `{jac['folded_pct']}%` (`min={jac['min_normalized_det_j']}`) | `0.0%` (`> 0`) |",
+            f"| **高光滚降** | 状态 / 末端斜率 / 全白削波率 | `{roll['rolloff_status']}` / `{roll['slope_shoulder_end']}` / `{roll['achromatic_white_clip_pct']}%` | 平滑衰减 (`< 0.45`) |",
+            f"| **斑马纹风险** | 物理曝光反转数 / 振荡波纹数 | `{len(mono['reversal_events'])}` / `{len(mono['oscillation_events'])}` | `0` / `0` |",
+            f"| **三维折叠** | 核心区折叠体素 / 边界压缩体素 | `{jac['core_folded_voxels']}` / `{jac['boundary_folded_voxels']}` (`min_core={jac['min_core_normalized_det_j']}`) | 核心区 `0` 格 |",
             f"| **极暗部斜率** | 暗部最大亮度斜率 `dY/dx` | `{shad['max_shadow_luma_slope']}` (at `{shad['max_slope_input_t']}`) | `< 6.5` |",
             f"| **暗部色度爆炸** | 近灰轴最大色度增益 | `{shad['max_shadow_chroma_gain']}x` (爆炸格 `{shad['chroma_explosion_voxels']}`) | `< 3.0x` (`0` 格) |",
             f"| **底噪仿真倍率** | 黑位底噪放大（亮度 / 色度） | `{sim['luma_noise_amp_vs_ref']}x` / `{sim['chroma_noise_amp_vs_ref']}x` | `< 2.2x` / `< 2.4x` |",
-            f"| **插值分歧** | 四面体 vs 三线性最大 / P99 ΔRGB | `{interp['max_divergence_delta_rgb']}` / `{interp['p99_divergence_delta_rgb']}` | `< 0.045` / `< 0.015` |",
-            f"| **连续性** | 晶格最大邻域跃迁 `ΔRGB` | `{disc['max_adjacent_delta_rgb']}` | `< 0.35` |",
+            f"| **插值分歧** | 物理有效区最大 / P99 ΔRGB | `{interp['phys_max_divergence_delta_rgb']}` / `{interp['phys_p99_divergence_delta_rgb']}` | `< 0.065` / `< 0.025` |",
+            f"| **连续性** | 晶格最大邻域跃迁 `ΔRGB` | `{disc['max_adjacent_delta_rgb']}` | `< 0.45` |",
             "",
         ]
     )
@@ -1750,7 +2229,7 @@ def render_markdown_report(report: Dict[str, Any], diag_png: Optional[Path], str
     if diag_png and stress_png:
         lines.extend(
             [
-                "## 三、可视化诊断图表",
+                "## 四、可视化诊断图表",
                 f"- 科学仪表盘图表：`{diag_png}`",
                 f"- 合成压力测试与伪影定位图：`{stress_png}`",
                 "",
@@ -1775,14 +2254,21 @@ def inspect_lut_file(
     grid = parsed.safe_grid_3d
 
     hw_metrics, hw_findings = check_hardware_and_range(parsed, target)
+    rolloff_metrics, rolloff_findings = check_highlight_rolloff(grid, profile)
     mono_metrics, mono_findings, curve_cache = check_monotonicity_and_zebra(grid, profile)
-    jac_metrics, jac_findings, det_norm = check_jacobian_folding(grid)
+    jac_metrics, jac_findings, det_norm = check_jacobian_folding(grid, profile)
     shad_metrics, shad_findings, sim_artifacts = check_extreme_shadows(grid, profile)
-    interp_metrics, interp_findings, ramp_diff = check_interpolation_divergence(grid)
-    disc_metrics, disc_findings = check_discontinuities_and_clipping(grid)
+    interp_metrics, interp_findings, ramp_diff = check_interpolation_divergence(grid, profile)
+    disc_metrics, disc_findings = check_discontinuities_and_clipping(grid, profile)
 
     all_findings = (
-        hw_findings + mono_findings + jac_findings + shad_findings + interp_findings + disc_findings
+        hw_findings
+        + rolloff_findings
+        + mono_findings
+        + jac_findings
+        + shad_findings
+        + interp_findings
+        + disc_findings
     )
     # 按严重程度排序
     sev_order = {"CRITICAL": 0, "WARNING": 1, "INFO": 2}
@@ -1807,6 +2293,7 @@ def inspect_lut_file(
         "findings": all_findings,
         "metrics": {
             "hardware_and_range": hw_metrics,
+            "highlight_rolloff": rolloff_metrics,
             "monotonicity_and_zebra": mono_metrics,
             "jacobian_folding": jac_metrics,
             "extreme_shadows": shad_metrics,
@@ -1891,6 +2378,7 @@ def main() -> int:
     # 终端简洁清晰打印结论
     s = report["summary"]
     hw = report["metrics"]["hardware_and_range"]
+    roll = report["metrics"]["highlight_rolloff"]
     shad = report["metrics"]["extreme_shadows"]
     sim = shad["monte_carlo_noise_sim"]
     print("=" * 72)
@@ -1900,6 +2388,10 @@ def main() -> int:
         f"尺寸: 3D={hw['lut_3d_size']} (1D={hw['lut_1d_size']})  |  "
         f"值域: [{hw['min_value']}, {hw['max_value']}]  |  "
         f"底噪放大: 亮度 {sim['luma_noise_amp_vs_ref']}x / 色度 {sim['chroma_noise_amp_vs_ref']}x"
+    )
+    print(
+        f"高光滚降: {roll['rolloff_status']} ({roll['rolloff_description']}) | "
+        f"死白削波: {roll['achromatic_white_clip_pct']}% | 色域壁投影: {roll['gamut_wall_projection_pct']}%"
     )
     if report["findings"]:
         print("-" * 72)

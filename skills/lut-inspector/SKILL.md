@@ -1,74 +1,71 @@
 ---
 name: lut-inspector
 description: >-
-  Use this skill whenever the user wants to inspect, validate, debug, or fix a .cube 3D LUT file exported from DaVinci Resolve (especially when using third-party DCTL plugins) for in-camera monitoring on Sony VENICE / FX6 / FX3 or other cinema cameras and monitors. Specifically triggers on symptoms like zebra-like banding/stripes, highlight solarization, extreme shadow noise/chroma specks, out-of-range clipping (<0.0 or >1.0), 65-point vs 33-point compatibility, or general LUT quality checks.
+  Use this skill whenever the user wants to inspect, validate, debug, or fix a .cube 3D LUT file exported from DaVinci Resolve (especially when using third-party DCTL plugins) for in-camera monitoring on Sony VENICE / FX6 / FX3 or other cinema cameras and monitors. Specifically triggers on symptoms like zebra-like banding/stripes, highlight solarization, extreme shadow noise/chroma specks, out-of-range clipping (<0.0 or >1.0), highlight roll-off vs gamut projection checks, 65-point vs 33-point compatibility, or general LUT technical QC.
 ---
 
-# LUT Inspector (`lut-inspector`) — 专业影视 LUT 质检与机内安全修复指南
+# LUT Inspector (`lut-inspector`) — 影视 LUT 客观工程质检与安全修复规范
 
-本 Skill 用于对 `.cube`（1D / 3D / 1D+3D Shaper）文件进行数学级质检、可视化伪影定位、DCTL/DaVinci 节点根因排查，并支持生成符合 **Sony VENICE / FX6 / FX3**（及通用机内监视器）规范的安全修复版 `.cube` 副本。
+本 Skill 用于对 `.cube`（1D / 3D / 1D+3D Shaper）文件进行物理色彩空间下的工程级数学质检、高光滚降评估、可视化伪影定位及机内安全规范化修复（主要面向 **Sony VENICE / FX6 / FX3** 及通用摄影机/监视器）。
+
+> [!CAUTION]
+> **【核心职责边界与防误判铁律 — 所有执行模型必须严格遵守】**
+> 1. **只做技术质检 (Technical QC)，严禁越界“教用户调色”**：
+>    - **绝对禁止**对用户的创意 Look 风格进行审美评价或瞎指挥修改（例如：18% 中灰偏暗/偏亮半档、胶片柔白峰值停在 `0.98~0.995`、低饱和区提饱和、整体暖调/青橙风格等，全都是调色师有意为之的 Look，**不是错误**）。
+>    - 若脚本结果 `status == "PASS"` 且无异常告警，**直接给出合格结论与客观数据即可，不要输出“从源头怎么调色/改节点”的说教段落**。只有当确实检出客观数学故障，或用户**明确追问**“为什么会这样/怎么在达芬奇改”时，才结合报告中的 `technical_note` 与 `references/` 说明技术原因。
+> 2. **严禁将“宽色域外壁投影”误判为“高光没有滚降”**：
+>    - 必须直接采信 `inspect_lut.py` 给出的 `highlight_rolloff` 结论（包含 `rolloff_status`、末端肩部斜率 `slope_shoulder_end`、全白削波 `achromatic_white_clip_pct` 与宽色域外壁投影 `gamut_wall_projection_pct`）。
+>    - 在宽色域（如 `S-Gamut3.Cine`）转 `Rec.709` 的 LUT 中，大量输入格点天然落在 Rec.709 之外，色域映射会使其**单通道**触及 `1.0`（其余通道 `< 1.0`），即单通道满幅占比常达 `50%~70%`。这属于**正常的色域边界投影压缩**，绝不等于“高光没有滚降”！真正有无高光滚降看**中性灰轴肩部斜率衰减**与**三通道全白平顶位置**。
+> 3. **严禁脱离物理色彩空间手写简化脚本覆写检测结论**：
+>    - 严禁自行用 `t * [1.15, 0.65, 0.15]` 在 Log 空间乘系数冒充曝光渐变，也严禁把 `S-Log3 / S-Gamut3.Cine` 下的输入/输出坐标直接套进 sRGB 色相角公式“推断偏色”。`inspect_lut.py` V2.0 已内置场景线性相机曝光扫描与色域矩阵拆分，一切数值请直接引用 `inspect_lut.py` 与 `<stem>_report.json` 的结果。
 
 > [!IMPORTANT]
-> **Windows 运行环境要求**：在本机 Windows 环境下，请统一使用 **`py`** 命令调用脚本（不要直接调用可能触发 Microsoft Store 占位符的 `python`）。所有脚本仅依赖 `numpy`、`matplotlib` 与标准库，无需 `scipy`。
+> **Windows 运行环境要求**：在本机 Windows 环境下，请统一使用 **`py`** 命令调用脚本（不要调用可能触发 Microsoft Store 占位符的 `python`）。所有脚本仅依赖 `numpy`、`matplotlib`、`Pillow` 与标准库，无需 `scipy`。
 
 ---
 
-## 核心能力与内置脚本
+## 内置脚本与知识库
 
 所有相对路径均以本 `SKILL.md` 所在目录（`<skill_dir>`）为基准：
 
-1. **科学质检与可视化脚本**：[scripts/inspect_lut.py](./scripts/inspect_lut.py)
-   - 检测 **斑马纹成因**：`> 1.0` 超白定点溢出回绕、高光/高饱和单调性反转（Solarization）、一阶差分锯齿振荡、3D 雅可比折叠（`det(J) < 0`）、DaVinci 四面体 vs 机内三线性插值分歧。
-   - 检测 **极暗部噪点成因**：`< 0.0` 负值下溢闪点、Sony S-Log3 0% 黑电平（`95/1023 ≈ 0.09286`）附近近灰轴色度爆炸（除零奇异点）、局部增益斜率尖峰，并运行 **64×64 传感器底噪蒙特卡洛仿真**量化噪声放大倍数。
-   - 自动产出：JSON 报告、Markdown 报告、6 宫格科学诊断图（`*_diagnostics.png`）、合成压力测试与伪影定位热力图（`*_stress_test.png`）。
+1. **核心工程质检与可视化脚本**：[scripts/inspect_lut.py](./scripts/inspect_lut.py)
+   - **机内硬件规范与越界检查**：检查晶格尺寸（Sony 标准 33 点）、1D+3D 混合 Shaper、`DOMAIN`、`NaN`/`Inf`、`< 0.0` 下溢闪点与 `> 1.0` 超白定点回绕。
+   - **高光滚降与锚点分析 (`check_highlight_rolloff`)**：精准区分中性灰肩部滚降衰减、三通道死白硬削波与宽色域外壁投影压缩。
+   - **斑马纹与单调性检查**：基于场景线性相机曝光扫描（`-7.0 EV ~ +6.5 EV`）检查亮度反转（Solarization）与晶格级锯齿振荡，以及核心有效色域内部三维雅可比折叠（`det(J) < 0`）和插值分歧。
+   - **极暗部噪点专项检查**：紧盯黑电平（如 Sony S-Log3 `95/1023 ≈ 0.092864`）附近斜率尖峰、近灰轴除零色度爆炸，并运行 64×64 传感器底噪蒙特卡洛仿真。
 2. **机内安全修复脚本**：[scripts/sanitize_lut.py](./scripts/sanitize_lut.py)
-   - 修补 `NaN`/`Inf`、将 1D+3D 烘焙合并为纯 3D LUT、高精度四面体重采样为 33 点、严格 `[0.0, 1.0]` 钳位、可选 `--tame-shadow-chroma`（镇定极暗部彩噪）与 `--de-oscillate`（保边阻尼去斑马纹），导出纯 ASCII 无 BOM 副本（绝不覆盖原文件）。
-3. **测试集生成器**：[scripts/generate_test_luts.py](./scripts/generate_test_luts.py)
-   - 快速生成标准健康样本与复刻 DCTL 典型缺陷（斑马纹 + 暗部彩噪）的 33 点 `.cube` 样本，用于回归验证。
-4. **按需查阅的参考知识库**：
+   - 修补 `NaN`/`Inf`、1D+3D 烘焙合并、四面体重采样转 33 点、严格 `[0.0, 1.0]` 钳位、可选 `--tame-shadow-chroma` 与 `--de-oscillate`，导出纯 ASCII 无 BOM 副本（绝不覆盖原文件）。
+3. **测试样本生成器**：[scripts/generate_test_luts.py](./scripts/generate_test_luts.py)
+4. **按需查阅参考手册**（仅在需要深入排查 DCTL/机内故障时阅读）：
    - Sony 机内规格与 S-Log3 黑位锚点原理：[references/sony_cinealta_lut_guide.md](./references/sony_cinealta_lut_guide.md)
-   - DaVinci Resolve 第三方 DCTL 常见伪影与代码/节点排查手册：[references/dctl_artifact_root_causes.md](./references/dctl_artifact_root_causes.md)
+   - DCTL 常见伪影技术成因手册：[references/dctl_artifact_root_causes.md](./references/dctl_artifact_root_causes.md)
 
 ---
 
-## 标准执行工作流 (SOP)
-
-当用户提供一个或多个 `.cube` 文件并要求检查、排查斑马纹/暗部噪点或准备上机监看时，按以下顺序执行：
+## 标准执行流程 (SOP)
 
 ### 步骤 1：运行科学质检脚本
 
-根据用户使用的摄影机与 Log 空间选择 `--profile`（常用 Sony 机型默认 `slog3`）和 `--target`（默认为 `sony_cinealta`）：
+根据素材 Log 空间选择 `--profile`（Sony 默认 `slog3`）和 `--target`（默认 `sony_cinealta`）：
 
 ```powershell
 py "<skill_dir>/scripts/inspect_lut.py" "<path_to_lut.cube>" --profile slog3 --target sony_cinealta --out-dir "<output_dir>"
 ```
 
-常用 `--profile` 选项：`slog3`（默认）、`logc3`、`logc4`、`vlog`、`log3g10`、`clog3`、`davinci_intermediate`、`acescct`、`rec709`、`generic_log`。  
-常用 `--target` 选项：`sony_cinealta`（VENICE / FX6 / FX3，默认）、`generic_camera`（Atomos/SmallHD/其他机内）、`post`（仅后期达芬奇内部使用）。
+常用 `--profile`：`slog3`（默认）、`logc3`、`logc4`、`vlog`、`log3g10`、`clog3`、`davinci_intermediate`、`acescct`、`rec709`、`generic_log`。  
+常用 `--target`：`sony_cinealta`（VENICE / FX6 / FX3，默认）、`generic_camera`（监视器/其他机型）、`post`（仅后期达芬奇内部）。
 
-### 步骤 2：检视可视化诊断图与报告
+### 步骤 2：阅读报告并检视 PNG 诊断图
 
-1. 用 `read_file` 读取生成的 `<stem>_report.json`（或 `<stem>_report.md`）获取全部定量发现。
-2. **务必用 `read_file` 直接查看生成的两张高分辨率图片**：
-   - `<output_dir>/<stem>_diagnostics.png`（检查灰阶曲线、斜率负值区、极暗部放大镜色度尖峰、黑位底噪块直观对比）
-   - `<output_dir>/<stem>_stress_test.png`（直观确认条纹与暗部彩噪定位在哪个亮度/色相区域）
-3. 如用户遇到具体 DCTL 故障或 Sony 机内报错，结合 `references/dctl_artifact_root_causes.md` 和 `references/sony_cinealta_lut_guide.md` 解释根本原因与达芬奇节点树修改建议（而非只丢出一串冷冰冰的数字）。
+1. 使用文件读取工具读取 `<output_dir>/<stem>_report.json`（或 `<stem>_report.md`）。
+2. **亲自用视觉读取工具检视生成的两张图片**，核对曲线趋势与热力图位置：
+   - `<output_dir>/<stem>_diagnostics.png`
+   - `<output_dir>/<stem>_stress_test.png`
 
-### 步骤 3：按需生成“机内安全修复版”并复检（闭环验证）
+### 步骤 3：按规范输出简洁客观的质检答复
 
-当检测到越界（`< 0.0` 或 `> 1.0`）、`NaN`/`Inf`、65 点/1D+3D 不兼容、暗部色度爆炸或高频锯齿震荡，且用户需要安全版本立即上机监看时：
-
-1. 根据检测发现的症状组合修复开关（绝不修改原文件，输出为新副本）：
-   ```powershell
-   py "<skill_dir>/scripts/sanitize_lut.py" "<path_to_lut.cube>" --size 33 --profile slog3 --clamp --fix-nan [--tame-shadow-chroma] [--de-oscillate]
-   ```
-   - 若报告存在 **极暗部近轴色度爆炸**：务必加上 `--tame-shadow-chroma`。
-   - 若报告存在 **高频锯齿振荡 / 斑马纹波纹**：可加上 `--de-oscillate`（同时提醒用户：强烈的高光单调性大反转建议仍应回到 DaVinci Resolve 中调低对应 DCTL 强度以从源头消除）。
-2. **对生成的新 `.cube` 副本再次运行 `inspect_lut.py`**，确认越界点清零、尺寸为 `33`、暗部底噪放大回归正常且无新引入的问题后，再交付给用户。
-
----
-
-## 向用户呈现结果原则
-
-- 用通俗准确的影视调色语言总结核心结论：**综合评级与得分**、**为什么会出现斑马纹**、**为什么极暗部会出现噪点/彩噪**、**在 DaVinci Resolve 节点树/DCTL 中如何从源头改好**。
-- 如果在向用户汇报时需要展示诊断图，可将 PNG 复制到当前对话 Artifact 目录并在回复中清晰引用（注意遵守工作区与链接规范）。
+按以下结构答复用户（简洁清晰，不添油加醋）：
+1. **核心质检结论**：`status`（`PASS` / `WARN` / `FAIL`）与健康分，一句话说明是否可直接上机监看。
+2. **高光滚降与影调锚点特征**：直接汇报 `rolloff_status`（如平滑肩部滚降 / 硬削波）、末端斜率、死白削波占比与色域外壁投影占比，**客观陈述** 18% 灰及白点输出值而不评价好坏。
+3. **极暗部与斑马纹隐患核查**：汇报值域范围、`min/max` 越界点数、物理曝光反转数、核心区三维折叠数与黑电平底噪放大倍率。
+4. **仅在发现问题或用户需要安全修复版时**：列出异常项的技术证据，并询问或按需执行 `sanitize_lut.py` 生成 `_sony_safe_33.cube` 副本后再次复检交付。
